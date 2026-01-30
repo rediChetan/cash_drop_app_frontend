@@ -91,19 +91,20 @@ function CashDrop() {
       }
     }
     
-    // Parse numeric values for numeric fields
-    const numericFields = ['startingCash', 'cashReceivedOnReceipt', 'pennies', 'nickels', 'dimes', 'quarters', 'halfDollars', 'ones', 'twos', 'fives', 'tens', 'twenties', 'fifties', 'hundreds'];
+    // Parse numeric values for numeric fields (except cashReceivedOnReceipt which should remain as text to allow decimals)
+    const numericFields = ['startingCash', 'pennies', 'nickels', 'dimes', 'quarters', 'halfDollars', 'ones', 'twos', 'fives', 'tens', 'twenties', 'fifties', 'hundreds'];
     if (numericFields.includes(name)) {
       const numValue = parseFloat(value) || 0;
       setFormData(prev => ({ ...prev, [name]: numValue }));
     } else {
+      // For cashReceivedOnReceipt and other text fields, keep as string to allow decimal input
       setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
   const calculateTotalCash = () => DENOMINATION_CONFIG.reduce((acc, d) => acc + (formData[d.field] * d.value), 0).toFixed(2);
   const calculateDropAmount = () => (parseFloat(calculateTotalCash()) - parseFloat(formData.startingCash)).toFixed(2);
-  const calculateVariance = () => (parseFloat(calculateDropAmount()) - formData.cashReceivedOnReceipt).toFixed(2);
+  const calculateVariance = () => (parseFloat(calculateDropAmount()) - parseFloat(formData.cashReceivedOnReceipt || 0)).toFixed(2);
 
   const calculateDenominations = () => {
     const amountToDrop = parseFloat(calculateDropAmount());
@@ -132,7 +133,7 @@ function CashDrop() {
   const isSubmitValid = () => {
     const drop = parseFloat(calculateDropAmount());
     const mathCheck = Math.abs(drop - (parseFloat(calculateTotalCash()) - parseFloat(formData.startingCash))) < 0.01;
-    return mathCheck && drop > 0 && formData.workStation && labelImage;
+    return mathCheck && drop > 0 && formData.workStation;
   };
 
   const handleSubmit = async () => {
@@ -293,10 +294,10 @@ function CashDrop() {
             {/* Image & Submit Column */}
             <div className="space-y-4 md:space-y-6">
               <div className="bg-white border rounded-lg p-4 md:p-6">
-                <h3 className="font-black uppercase mb-4 md:mb-6 tracking-widest border-b pb-2" style={{ fontSize: '18px', color: COLORS.gray }}>3. Cash Drop Receipt</h3>
+                <h3 className="font-black uppercase mb-4 md:mb-6 tracking-widest border-b pb-2" style={{ fontSize: '18px', color: COLORS.gray }}>3. Cash Drop Receipt (Optional)</h3>
                 <label className={`group flex flex-col items-center justify-center w-full h-32 md:h-40 border-2 border-dashed rounded-lg cursor-pointer transition-all ${labelImage ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-pink-500'}`}>
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <p className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>{labelImage ? "✅ Image Ready" : "Upload Cash Drop Receipt"}</p>
+                    <p className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>{labelImage ? "✅ Image Ready" : "Upload Cash Drop Receipt (Optional)"}</p>
                     <p className="mt-1" style={{ color: COLORS.gray, fontSize: '14px' }}>{labelImage ? labelImage.name : "PNG, JPG or JPEG"}</p>
                   </div>
                   <input type="file" className="hidden" onChange={(e) => setLabelImage(e.target.files[0])} accept="image/*" />
@@ -324,7 +325,6 @@ function CashDrop() {
               ) : (
                 <div className="p-4 bg-red-50 border border-red-100 rounded-lg">
                   <p className="font-black text-red-500 leading-relaxed" style={{ fontSize: '14px' }}>
-                    {!labelImage && "• Missing Cash Drop Receipt Image"}<br/>
                     {parseFloat(calculateDropAmount()) <= 0 && "• Drop Amount must be positive"}<br/>
                     {formData.workStation === '' && "• Register Number is required"}<br/>
                     {formData.shiftNumber === '' && "• Shift Number is required"}<br/>
