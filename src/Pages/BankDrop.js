@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { API_ENDPOINTS } from "../config/api";
+import { getPSTDate, getPSTWeekStart, getPSTMonthStart, formatPSTDate } from '../utils/dateUtils';
 
 const DENOMINATION_CONFIG = [
   { name: 'Hundreds', value: 100, field: 'hundreds', display: 'Hundreds ($100)' },
@@ -17,6 +18,11 @@ const DENOMINATION_CONFIG = [
 ];
 
 const BankDrop = () => {
+  // Set page title
+  useEffect(() => {
+    document.title = 'Bank Drop';
+  }, []);
+
   // Color constants
   const COLORS = {
     magenta: '#AA056C',
@@ -26,8 +32,8 @@ const BankDrop = () => {
   };
 
   const [data, setData] = useState([]);
-  const [dateFrom, setDateFrom] = useState(new Date().toISOString().slice(0, 10));
-  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
+  const [dateFrom, setDateFrom] = useState(getPSTDate());
+  const [dateTo, setDateTo] = useState(getPSTDate());
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedCashDrop, setSelectedCashDrop] = useState(null);
@@ -86,18 +92,17 @@ const BankDrop = () => {
   }, []);
 
   const handleQuickFilter = (type) => {
-    const now = new Date();
-    let start = new Date();
+    let start;
     if (type === 'WTD') {
-      const day = now.getDay();
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-      start = new Date(now.setDate(diff));
+      start = getPSTWeekStart();
     } else if (type === 'MTD') {
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      start = getPSTMonthStart();
+    } else {
+      start = getPSTDate();
     }
-    setDateFrom(start.toISOString().slice(0, 10));
-    setDateTo(new Date().toISOString().slice(0, 10));
-    fetchData(start.toISOString().slice(0, 10), new Date().toISOString().slice(0, 10));
+    setDateFrom(start);
+    setDateTo(getPSTDate());
+    fetchData(start, getPSTDate());
   };
 
   const handleBankDroppedToggle = async (item) => {
@@ -477,7 +482,7 @@ const BankDrop = () => {
                     />
                   </td>
                   <td className="p-2 md:p-4">
-                    <div className="font-black" style={{ fontSize: '14px' }}>{item.date}</div>
+                    <div className="font-black" style={{ fontSize: '14px' }}>{formatPSTDate(item.date)}</div>
                     <div className="font-bold uppercase" style={{ color: COLORS.magenta, fontSize: '14px' }}>
                       {item.workstation} | Shift {item.shift_number}
                     </div>
@@ -557,7 +562,7 @@ const BankDrop = () => {
               ✕
             </button>
             
-            <h3 className="font-black mb-4" style={{ fontSize: '18px', color: COLORS.gray }}>Edit Denominations - {selectedCashDrop.workstation} | {selectedCashDrop.date}</h3>
+            <h3 className="font-black mb-4" style={{ fontSize: '18px', color: COLORS.gray }}>Edit Denominations - {selectedCashDrop.workstation} | {formatPSTDate(selectedCashDrop.date)}</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               {DENOMINATION_CONFIG.map(denom => (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -11,6 +11,11 @@ const COLORS = {
 };
 
 function LoginPage() {
+    // Set page title
+    useEffect(() => {
+        document.title = 'Login';
+    }, []);
+
     const [email, setEmail] = useState("");
     const [totp, setTotp] = useState("");
     const [message, setMessage] = useState("");

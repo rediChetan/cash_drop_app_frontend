@@ -11,6 +11,11 @@ const COLORS = {
 };
 
 function RegisterPage() {
+    // Set page title
+    useEffect(() => {
+        document.title = 'Register';
+    }, []);
+
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [isAdmin, setIsAdmin] = useState(false);

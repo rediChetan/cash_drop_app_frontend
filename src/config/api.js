@@ -23,6 +23,12 @@ export const API_ENDPOINTS = {
   BANK_DROP_SUMMARY: `${API_BASE_URL}/api/bank-drop/summary`,
   BANK_DROP_MARK_DROPPED: `${API_BASE_URL}/api/bank-drop/mark-dropped`,
   
+  // Admin Settings endpoints
+  ADMIN_SETTINGS: `${API_BASE_URL}/api/admin-settings`,
+  
+  // Ignore Cash Drop
+  IGNORE_CASH_DROP: `${API_BASE_URL}/api/cash-drop-app1/cash-drop/ignore`,
+  
   // Media
   MEDIA: `${API_BASE_URL}/media`,
 };

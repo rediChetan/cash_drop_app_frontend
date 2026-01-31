@@ -96,6 +96,11 @@ const EditUserModal = ({ user, onClose, onSave }) => {
 };
 
 const Dashboard = () => {
+    // Set page title
+    useEffect(() => {
+        document.title = 'Admin Dashboard';
+    }, []);
+
     const [users, setUsers] = useState([]);
     const [isLoggedIn, setIsLoggedIn] = useState(!!sessionStorage.getItem('access_token'));
     const [isAdmin, setIsAdmin] = useState(sessionStorage.getItem('is_admin') === 'true');
@@ -105,6 +110,22 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [statusMessage, setStatusMessage] = useState({ show: false, text: '', type: 'info' });
+    
+    // Admin Settings state
+    const [settings, setSettings] = useState({
+        shifts: [],
+        workstations: [],
+        starting_amount: 200.00,
+        max_cash_drops_per_day: 10
+    });
+    const [originalSettings, setOriginalSettings] = useState({
+        shifts: [],
+        workstations: [],
+        starting_amount: 200.00,
+        max_cash_drops_per_day: 10
+    });
+    const [newShift, setNewShift] = useState('');
+    const [newWorkstation, setNewWorkstation] = useState('');
 
     const showStatusMessage = (text, type = 'info') => {
         setStatusMessage({ show: true, text, type });
@@ -203,8 +224,116 @@ const Dashboard = () => {
         }
     };
 
+    const fetchAdminSettings = async () => {
+        let accessToken = sessionStorage.getItem('access_token');
+        if (!accessToken) {
+            return;
+        }
+        try {
+            let response = await fetch(API_ENDPOINTS.ADMIN_SETTINGS, {
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+            });
+            if (response.status === 401) {
+                accessToken = await refreshToken();
+                if (accessToken) {
+                    response = await fetch(API_ENDPOINTS.ADMIN_SETTINGS, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` },
+                    });
+                } else {
+                    return;
+                }
+            }
+            if (response.ok) {
+                const data = await response.json();
+                setSettings(data);
+                setOriginalSettings(JSON.parse(JSON.stringify(data))); // Deep copy
+            }
+        } catch (error) {
+            console.error("Error fetching admin settings:", error);
+        }
+    };
+
+    const updateAdminSettings = async () => {
+        let accessToken = sessionStorage.getItem('access_token');
+        if (!accessToken) {
+            showStatusMessage("No access token found. Please log in again.", 'error');
+            return;
+        }
+        try {
+            let response = await fetch(API_ENDPOINTS.ADMIN_SETTINGS, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify(settings),
+            });
+            if (response.status === 401) {
+                accessToken = await refreshToken();
+                if (accessToken) {
+                    response = await fetch(API_ENDPOINTS.ADMIN_SETTINGS, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${accessToken}`,
+                        },
+                        body: JSON.stringify(settings),
+                    });
+                } else {
+                    showStatusMessage("Authentication failed. Please log in again.", 'error');
+                    return;
+                }
+            }
+            if (response.ok) {
+                showStatusMessage("Settings updated successfully!", 'success');
+                await fetchAdminSettings(); // Update original settings after save
+            } else {
+                const errorData = await response.json();
+                showStatusMessage(`Failed to update settings: ${errorData.error || response.statusText}`, 'error');
+            }
+        } catch (error) {
+            console.error("Error updating settings:", error);
+            showStatusMessage("Error updating settings: " + error.message, 'error');
+        }
+    };
+
+    const addShift = () => {
+        if (newShift.trim() && !settings.shifts.includes(newShift.trim())) {
+            setSettings(prev => ({
+                ...prev,
+                shifts: [...prev.shifts, newShift.trim()]
+            }));
+            setNewShift('');
+        }
+    };
+
+    const removeShift = (shift) => {
+        setSettings(prev => ({
+            ...prev,
+            shifts: prev.shifts.filter(s => s !== shift)
+        }));
+    };
+
+    const addWorkstation = () => {
+        if (newWorkstation.trim() && !settings.workstations.includes(newWorkstation.trim())) {
+            setSettings(prev => ({
+                ...prev,
+                workstations: [...prev.workstations, newWorkstation.trim()]
+            }));
+            setNewWorkstation('');
+        }
+    };
+
+    const removeWorkstation = (workstation) => {
+        setSettings(prev => ({
+            ...prev,
+            workstations: prev.workstations.filter(w => w !== workstation)
+        }));
+    };
+
     useEffect(() => {
         fetchUsers();
+        fetchAdminSettings();
     }, [isLoggedIn, isAdmin]);
 
     const handleEdit = (user) => {
@@ -356,7 +485,6 @@ const Dashboard = () => {
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                             <h2 className="font-black uppercase italic tracking-tighter" style={{ fontSize: '24px' }}>Admin <span style={{ color: COLORS.magenta }}>Dashboard</span></h2>
-                            <p className="text-xs font-bold tracking-widest uppercase mt-1" style={{ color: COLORS.gray, fontSize: '14px' }}>User Management</p>
                         </div>
                         <Link
                             to="/register"
@@ -368,68 +496,199 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                {error && (
-                    <div className="p-4 bg-red-50 border-l-4 border-red-500">
-                        <p className="font-bold text-red-700" style={{ fontSize: '14px' }}>{error}</p>
-                    </div>
-                )}
+                {/* Two Column Layout: Settings (Left) and Users (Right) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 p-4 md:p-6">
+                    {/* Left Column: Admin Settings */}
+                    <div className="p-4 md:p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
+                        <h3 className="font-black uppercase mb-4" style={{ fontSize: '18px', color: COLORS.gray }}>Cash Drop Settings</h3>
+                        <div className="space-y-6">
+                            {/* Shifts */}
+                            <div>
+                                <label className="block font-bold mb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Shifts</label>
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        value={newShift}
+                                        onChange={(e) => setNewShift(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && addShift()}
+                                        placeholder="Add shift (e.g., 1, 2, 3)"
+                                        className="flex-1 p-2 border rounded"
+                                        style={{ fontSize: '14px' }}
+                                    />
+                                    <button
+                                        onClick={addShift}
+                                        className="px-4 py-2 text-white font-bold rounded"
+                                        style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {settings.shifts.map((shift, idx) => (
+                                        <span key={idx} className="inline-flex items-center gap-1 px-3 py-1 bg-white border rounded">
+                                            <span style={{ fontSize: '14px' }}>{shift}</span>
+                                            <button
+                                                onClick={() => removeShift(shift)}
+                                                className="text-red-500 hover:text-red-700"
+                                                style={{ fontSize: '14px' }}
+                                            >
+                                                ×
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-gray-50 font-black uppercase border-b" style={{ color: COLORS.gray }}>
-                                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>ID</th>
-                                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Name</th>
-                                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Email</th>
-                                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Admin</th>
-                                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {users.length > 0 ? users.map(user => (
-                                <tr key={user.id} className="border-b hover:bg-pink-50/30 transition-colors">
-                                    <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px' }}>{user.id}</td>
-                                    <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px' }}>{user.name}</td>
-                                    <td className="p-2 md:p-4" style={{ fontSize: '14px' }}>{user.email}</td>
-                                    <td className="p-2 md:p-4">
-                                        {user.is_admin ? (
-                                            <span className="px-2 py-1 rounded font-bold uppercase" style={{ backgroundColor: COLORS.yellowGreen + '20', color: COLORS.yellowGreen, fontSize: '14px' }}>
-                                                Yes
-                                            </span>
-                                        ) : (
-                                            <span className="px-2 py-1 rounded font-bold uppercase" style={{ backgroundColor: COLORS.gray + '20', color: COLORS.gray, fontSize: '14px' }}>
-                                                No
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="p-2 md:p-4">
-                                        <div className="flex flex-col md:flex-row gap-2">
+                            {/* Workstations */}
+                            <div>
+                                <label className="block font-bold mb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Workstations</label>
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        value={newWorkstation}
+                                        onChange={(e) => setNewWorkstation(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && addWorkstation()}
+                                        placeholder="Add workstation (e.g., Register 1)"
+                                        className="flex-1 p-2 border rounded"
+                                        style={{ fontSize: '14px' }}
+                                    />
+                                    <button
+                                        onClick={addWorkstation}
+                                        className="px-4 py-2 text-white font-bold rounded"
+                                        style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {settings.workstations.map((workstation, idx) => (
+                                        <span key={idx} className="inline-flex items-center gap-1 px-3 py-1 bg-white border rounded">
+                                            <span style={{ fontSize: '14px' }}>{workstation}</span>
                                             <button
-                                                onClick={() => handleEdit(user)}
-                                                className="px-3 py-1 rounded font-bold transition"
-                                                style={{ backgroundColor: COLORS.lightPink, color: 'white', fontSize: '14px' }}
+                                                onClick={() => removeWorkstation(workstation)}
+                                                className="text-red-500 hover:text-red-700"
+                                                style={{ fontSize: '14px' }}
                                             >
-                                                Edit
+                                                ×
                                             </button>
-                                            <button
-                                                onClick={() => handleDeleteClick(user.id)}
-                                                className="px-3 py-1 rounded font-bold transition"
-                                                style={{ backgroundColor: COLORS.gray, color: 'white', fontSize: '14px' }}
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )) : (
-                                <tr>
-                                    <td colSpan="5" className="p-20 text-center italic font-bold uppercase tracking-widest" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                        No users found
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Starting Amount */}
+                            <div>
+                                <label className="block font-bold mb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Starting Cash Amount</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={settings.starting_amount}
+                                    onChange={(e) => setSettings(prev => ({ ...prev, starting_amount: parseFloat(e.target.value) || 0 }))}
+                                    className="w-full p-2 border rounded"
+                                    style={{ fontSize: '14px' }}
+                                />
+                            </div>
+
+                            {/* Max Cash Drops Per Day */}
+                            <div>
+                                <label className="block font-bold mb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Max Cash Drops Per Day</label>
+                                <input
+                                    type="number"
+                                    value={settings.max_cash_drops_per_day}
+                                    onChange={(e) => setSettings(prev => ({ ...prev, max_cash_drops_per_day: parseInt(e.target.value) || 0 }))}
+                                    className="w-full p-2 border rounded"
+                                    style={{ fontSize: '14px' }}
+                                />
+                            </div>
+                        </div>
+                        <div className="mt-6">
+                            <button
+                                onClick={updateAdminSettings}
+                                disabled={JSON.stringify(settings) === JSON.stringify(originalSettings)}
+                                className={`w-full px-6 py-2 font-black rounded-lg shadow-md transition-all active:scale-95 ${
+                                    JSON.stringify(settings) === JSON.stringify(originalSettings)
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'text-white'
+                                }`}
+                                style={{ 
+                                    backgroundColor: JSON.stringify(settings) === JSON.stringify(originalSettings) 
+                                        ? undefined 
+                                        : COLORS.yellowGreen, 
+                                    fontSize: '14px' 
+                                }}
+                            >
+                                Save Settings
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Users List */}
+                    <div className="p-4 md:p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
+                        <h3 className="font-black uppercase mb-4" style={{ fontSize: '18px', color: COLORS.gray }}>User Management</h3>
+                        {error && (
+                            <div className="p-4 bg-red-50 border-l-4 border-red-500 mb-4">
+                                <p className="font-bold text-red-700" style={{ fontSize: '14px' }}>{error}</p>
+                            </div>
+                        )}
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-gray-50 font-black uppercase border-b" style={{ color: COLORS.gray }}>
+                                        <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>ID</th>
+                                        <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Name</th>
+                                        <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Email</th>
+                                        <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Admin</th>
+                                        <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {users.length > 0 ? users.map(user => (
+                                        <tr key={user.id} className="border-b hover:bg-pink-50/30 transition-colors">
+                                            <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px' }}>{user.id}</td>
+                                            <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px' }}>{user.name}</td>
+                                            <td className="p-2 md:p-4" style={{ fontSize: '14px' }}>{user.email}</td>
+                                            <td className="p-2 md:p-4">
+                                                {user.is_admin ? (
+                                                    <span className="px-2 py-1 rounded font-bold uppercase" style={{ backgroundColor: COLORS.yellowGreen + '20', color: COLORS.yellowGreen, fontSize: '14px' }}>
+                                                        Yes
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2 py-1 rounded font-bold uppercase" style={{ backgroundColor: COLORS.gray + '20', color: COLORS.gray, fontSize: '14px' }}>
+                                                        No
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="p-2 md:p-4">
+                                                <div className="flex flex-col md:flex-row gap-2">
+                                                    <button
+                                                        onClick={() => handleEdit(user)}
+                                                        className="px-3 py-1 rounded font-bold transition"
+                                                        style={{ backgroundColor: COLORS.lightPink, color: 'white', fontSize: '14px' }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteClick(user.id, user.name)}
+                                                        className="px-3 py-1 rounded font-bold transition"
+                                                        style={{ backgroundColor: COLORS.gray, color: 'white', fontSize: '14px' }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )) : (
+                                        <tr>
+                                            <td colSpan="5" className="p-20 text-center italic font-bold uppercase tracking-widest" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                                No users found
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
 

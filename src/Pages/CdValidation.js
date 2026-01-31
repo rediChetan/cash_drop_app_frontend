@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { API_ENDPOINTS } from '../config/api';
+import { getPSTDate, getPSTWeekStart, getPSTMonthStart, formatPSTDate } from '../utils/dateUtils';
 
 function CashDropValidation() {
   const [data, setData] = useState([]);
-  const [dateFrom, setDateFrom] = useState(new Date().toISOString().slice(0, 10));
-  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
+  const [dateFrom, setDateFrom] = useState(getPSTDate());
+  const [dateTo, setDateTo] = useState(getPSTDate());
   const [showOnlyUnreconciled, setShowOnlyUnreconciled] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
   const [adminCounts, setAdminCounts] = useState({});
@@ -14,6 +15,11 @@ function CashDropValidation() {
   const [statusMessages, setStatusMessages] = useState({});
   const [expandedRows, setExpandedRows] = useState({});
   const [unreconcileModal, setUnreconcileModal] = useState({ show: false, item: null });
+
+  // Set page title
+  useEffect(() => {
+    document.title = 'Validation Terminal';
+  }, []);
   
   const DENOMINATION_CONFIG = [
     { name: 'hundreds', value: 100, display: 'Hundreds ($100)' },
@@ -211,18 +217,17 @@ function CashDropValidation() {
   };
 
   const handleQuickFilter = (type) => {
-    const now = new Date();
-    let start = new Date();
+    let start;
     if (type === 'WTD') {
-      const day = now.getDay();
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-      start = new Date(now.setDate(diff));
+      start = getPSTWeekStart();
     } else if (type === 'MTD') {
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      start = getPSTMonthStart();
+    } else {
+      start = getPSTDate();
     }
-    setDateFrom(start.toISOString().slice(0, 10));
-    setDateTo(new Date().toISOString().slice(0, 10));
-    fetchData(start.toISOString().slice(0, 10), new Date().toISOString().slice(0, 10));
+    setDateFrom(start);
+    setDateTo(getPSTDate());
+    fetchData(start, getPSTDate());
   };
 
   const filteredList = showOnlyUnreconciled ? data.filter(d => !d.is_reconciled) : data;
@@ -316,7 +321,7 @@ function CashDropValidation() {
                   <React.Fragment key={item.id}>
                     <tr className="border-b hover:bg-pink-50/30 transition-colors">
                       <td className="p-2 md:p-4">
-                        <div className="font-black" style={{ fontSize: '14px' }}>{item.date}</div>
+                        <div className="font-black" style={{ fontSize: '14px' }}>{formatPSTDate(item.date)}</div>
                         <div className="font-bold uppercase" style={{ color: COLORS.magenta, fontSize: '14px' }}>{item.workstation} | {item.user_name}</div>
                       </td>
                       <td className="p-2 md:p-4">
@@ -567,7 +572,7 @@ function CashDropValidation() {
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-bold uppercase" style={{ fontSize: '14px', color: COLORS.gray }}>Date:</span>
-                    <span className="font-black" style={{ fontSize: '14px', color: COLORS.gray }}>{unreconcileModal.item.date}</span>
+                    <span className="font-black" style={{ fontSize: '14px', color: COLORS.gray }}>{formatPSTDate(unreconcileModal.item.date)}</span>
                   </div>
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-bold uppercase" style={{ fontSize: '14px', color: COLORS.gray }}>Register:</span>

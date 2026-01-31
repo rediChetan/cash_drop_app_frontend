@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS } from '../config/api';
+import { getPSTDate } from '../utils/dateUtils';
 
 function CashDrop() {
   const navigate = useNavigate();
+  
+  // Set page title
+  useEffect(() => {
+    document.title = 'Cash Drop';
+  }, []);
   
   // Color constants
   const COLORS = {
@@ -18,7 +24,7 @@ function CashDrop() {
     employeeName: '',
     shiftNumber: '',
     workStation: '',
-    date: new Date().toISOString().slice(0, 10),
+    date: getPSTDate(),
     startingCash: '200.00',
     cashReceivedOnReceipt: 0,
     pennies: 0, nickels: 0, dimes: 0, quarters: 0, halfDollars: 0,
@@ -32,6 +38,8 @@ function CashDrop() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState({ show: false, text: '', type: 'info' });
+  const [adminSettings, setAdminSettings] = useState({ shifts: [], workstations: [], starting_amount: 200.00, max_cash_drops_per_day: 10 });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const DENOMINATION_CONFIG = [
     { name: 'Hundreds', value: 100, field: 'hundreds', display: 'Hundreds ($100)' },
@@ -63,6 +71,21 @@ function CashDrop() {
       } catch (err) { navigate('/login'); }
     };
     fetchUser();
+    
+    // Fetch admin settings
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch(API_ENDPOINTS.ADMIN_SETTINGS);
+        if (response.ok) {
+          const data = await response.json();
+          setAdminSettings(data);
+          setFormData(prev => ({ ...prev, startingCash: data.starting_amount.toString() }));
+        }
+      } catch (error) {
+        console.error("Error fetching admin settings:", error);
+      }
+    };
+    fetchSettings();
   }, [navigate]);
 
   useEffect(() => {
@@ -80,8 +103,8 @@ function CashDrop() {
     
     // Prevent selecting prior day's dates
     if (name === 'date') {
-      const selectedDate = new Date(value);
-      const today = new Date();
+      const selectedDate = new Date(value + 'T00:00:00-08:00'); // PST
+      const today = new Date(getPSTDate() + 'T00:00:00-08:00'); // PST
       today.setHours(0, 0, 0, 0);
       selectedDate.setHours(0, 0, 0, 0);
       
@@ -138,7 +161,22 @@ function CashDrop() {
 
   const handleSubmit = async () => {
     const token = sessionStorage.getItem('access_token');
+    setIsSubmitting(true);
     try {
+      // Check max cash drops per day (excluding ignored ones)
+      const todayDropsResponse = await fetch(`${API_ENDPOINTS.CASH_DROP}?datefrom=${formData.date}&dateto=${formData.date}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (todayDropsResponse.ok) {
+        const todayDrops = await todayDropsResponse.json();
+        const nonIgnoredCount = todayDrops.filter(d => !d.ignored).length;
+        if (nonIgnoredCount >= adminSettings.max_cash_drops_per_day) {
+          showStatusMessage(`Maximum cash drops per day (${adminSettings.max_cash_drops_per_day}) reached. Please ignore any incorrect entries first.`, 'error');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       // 1. Save Drawer
       const drawerData = {
         workstation: formData.workStation,
@@ -184,10 +222,11 @@ function CashDrop() {
 
       if (!dropRes.ok) throw new Error('Failed to save Cash Drop & Image.');
       
-      showStatusMessage('Cash Drop finalized successfully!', 'success');
-      setTimeout(() => navigate('/cd-dashboard'), 2000);
+      // Success - navigate immediately
+      navigate('/cd-dashboard');
 
     } catch (err) {
+      setIsSubmitting(false);
       showStatusMessage(err.message, 'error');
     }
   };
@@ -195,7 +234,16 @@ function CashDrop() {
   if (loading) return <div className="h-screen flex items-center justify-center" style={{ fontFamily: 'Calibri, Verdana, sans-serif' }}>Initializing Terminal...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-3 md:p-6" style={{ fontFamily: 'Calibri, Verdana, sans-serif', fontSize: '14px', color: COLORS.gray }}>
+    <div className={`min-h-screen bg-gray-50 p-3 md:p-6 ${isSubmitting ? 'blur-sm pointer-events-none' : ''}`} style={{ fontFamily: 'Calibri, Verdana, sans-serif', fontSize: '14px', color: COLORS.gray }}>
+      {/* Loading Overlay */}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-2xl p-8 flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: COLORS.magenta }}></div>
+            <p className="font-black uppercase tracking-widest" style={{ fontSize: '18px', color: COLORS.magenta }}>Processing...</p>
+          </div>
+        </div>
+      )}
       
       {/* Status Message */}
       {statusMessage.show && (
@@ -222,15 +270,21 @@ function CashDrop() {
             <div className="space-y-3">
               <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Shift Number</label>
-                <input type="text" name="shiftNumber" value={formData.shiftNumber} onChange={handleChange} className="p-2 bg-white border-b border-gray-300 focus:border-pink-600 outline-none" style={{ fontSize: '14px' }} />
+                <select name="shiftNumber" value={formData.shiftNumber} onChange={handleChange} className="p-2 bg-white border-b border-gray-300 focus:border-pink-600 outline-none" style={{ fontSize: '14px' }}>
+                  <option value="">Select Shift</option>
+                  {adminSettings.shifts.map((shift, idx) => (
+                    <option key={idx} value={shift}>{shift}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Register Number</label>
-                <input type="text" name="workStation" value={formData.workStation} onChange={handleChange} className="p-2 bg-white border-b border-gray-300 focus:border-pink-600 outline-none" style={{ fontSize: '14px' }} />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Starting Cash</label>
-                <input type="text" name="startingCash" value={formData.startingCash} readOnly={!isAdmin} onChange={handleChange} className="p-2 bg-white border-b border-gray-300 font-bold" style={{ fontSize: '14px', color: COLORS.magenta }} />
+                <select name="workStation" value={formData.workStation} onChange={handleChange} className="p-2 bg-white border-b border-gray-300 focus:border-pink-600 outline-none" style={{ fontSize: '14px' }}>
+                  <option value="">Select Register</option>
+                  {adminSettings.workstations.map((workstation, idx) => (
+                    <option key={idx} value={workstation}>{workstation}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.magenta, fontSize: '14px' }}>Cash Received on Receipt</label>
@@ -246,7 +300,11 @@ function CashDrop() {
               </div>
               <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Date</label>
-                <input type="date" name="date" value={formData.date} onChange={handleChange} max={new Date().toISOString().slice(0, 10)} className="p-2 bg-white border-b border-gray-300 font-bold focus:border-pink-600 outline-none" style={{ fontSize: '14px', color: COLORS.gray }} />
+                <input type="date" name="date" value={formData.date} onChange={handleChange} max={getPSTDate()} className="p-2 bg-white border-b border-gray-300 font-bold focus:border-pink-600 outline-none" style={{ fontSize: '14px', color: COLORS.gray }} />
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Starting Cash</label>
+                <div className="p-2 bg-transparent border-b border-gray-300 font-bold" style={{ fontSize: '14px', color: COLORS.magenta }}>${formData.startingCash}</div>
               </div>
             </div>
           </div>

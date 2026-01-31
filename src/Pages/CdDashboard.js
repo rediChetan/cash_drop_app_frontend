@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS } from '../config/api';
+import { getPSTDate, getPSTWeekStart, getPSTMonthStart, getPSTYearStart, formatPSTDateTime, formatPSTDate } from '../utils/dateUtils';
 
 function CdDashboard() {
   const navigate = useNavigate();
-  const [selectedDateFrom, setSelectedDateFrom] = useState(new Date().toISOString().slice(0, 10));
-  const [selectedDateTo, setSelectedDateTo] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedDateFrom, setSelectedDateFrom] = useState(getPSTDate());
+  const [selectedDateTo, setSelectedDateTo] = useState(getPSTDate());
   const [cashDrops, setCashDrops] = useState([]);
   const [cashDrawers, setCashDrawers] = useState([]);
   const [activeDate, setActiveDate] = useState(null); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [ignoreModal, setIgnoreModal] = useState({ show: false, item: null, reason: '' });
+  const [statusMessage, setStatusMessage] = useState({ show: false, text: '', type: 'info' });
+
+  // Set page title
+  useEffect(() => {
+    document.title = 'Cash Drop Dashboard';
+  }, []);
 
   const COLORS = {
     magenta: '#AA056C',
@@ -83,27 +91,24 @@ function CdDashboard() {
   };
 
   const handleWTD = () => {
-    const now = new Date();
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1); 
-    const start = new Date(now.setDate(diff)).toISOString().slice(0, 10);
-    const end = new Date().toISOString().slice(0, 10);
+    const start = getPSTWeekStart();
+    const end = getPSTDate();
     setSelectedDateFrom(start);
     setSelectedDateTo(end);
     fetchData(start, end);
   };
 
   const handleMTD = () => {
-    const start = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
-    const end = new Date().toISOString().slice(0, 10);
+    const start = getPSTMonthStart();
+    const end = getPSTDate();
     setSelectedDateFrom(start);
     setSelectedDateTo(end);
     fetchData(start, end);
   };
 
   const handleYTD = () => {
-    const start = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);
-    const end = new Date().toISOString().slice(0, 10);
+    const start = getPSTYearStart();
+    const end = getPSTDate();
     setSelectedDateFrom(start);
     setSelectedDateTo(end);
     fetchData(start, end);
@@ -118,14 +123,46 @@ function CdDashboard() {
   );
 
   const formatDateTime = (dateStr, submittedAt) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    let formatted = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    if (submittedAt) {
-      const submitted = new Date(submittedAt);
-      formatted += ` at ${submitted.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+    return formatPSTDateTime(dateStr, submittedAt);
+  };
+
+  const showStatusMessage = (text, type = 'info') => {
+    setStatusMessage({ show: true, text, type });
+    setTimeout(() => setStatusMessage({ show: false, text: '', type: 'info' }), 5000);
+  };
+
+  const handleIgnoreCashDrop = async () => {
+    if (!ignoreModal.reason.trim()) {
+      showStatusMessage('Please provide a reason for ignoring this cash drop', 'error');
+      return;
     }
-    return formatted;
+
+    try {
+      const token = sessionStorage.getItem('access_token');
+      const response = await fetch(API_ENDPOINTS.IGNORE_CASH_DROP, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id: ignoreModal.item.id,
+          ignore_reason: ignoreModal.reason.trim()
+        })
+      });
+
+      if (response.ok) {
+        showStatusMessage('Cash drop ignored successfully', 'success');
+        setIgnoreModal({ show: false, item: null, reason: '' });
+        fetchData(selectedDateFrom, selectedDateTo);
+      } else {
+        const error = await response.json();
+        showStatusMessage(error.error || 'Failed to ignore cash drop', 'error');
+      }
+    } catch (error) {
+      console.error('Error ignoring cash drop:', error);
+      showStatusMessage('Error ignoring cash drop: ' + error.message, 'error');
+    }
   };
 
   if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center" style={{ fontFamily: 'Calibri, Verdana, sans-serif' }}>Loading...</div>;
@@ -179,7 +216,7 @@ function CdDashboard() {
                     fontSize: '14px'
                   }}
                 >
-                  {new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {formatPSTDateTime(date, null, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </button>
               ))}
             </div>
@@ -215,7 +252,13 @@ function CdDashboard() {
                         {/* Drop Card */}
                         <div className="h-full">
                           {drop ? (
-                            <div className="h-full flex flex-col p-4 md:p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+                            <div className="h-full flex flex-col p-4 md:p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm relative">
+                              {/* Ignored Ribbon */}
+                              {drop.ignored && (
+                                <div className="absolute top-0 right-0 bg-red-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>
+                                  IGNORED
+                                </div>
+                              )}
                               <div className="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-4 gap-2">
                                 <span className="text-xs font-bold px-2 py-0.5 rounded uppercase" style={{ backgroundColor: COLORS.lightPink + '20', color: COLORS.magenta, fontSize: '14px' }}>Shift {drop.shift_number}</span>
                                 <span className="text-xl md:text-2xl font-bold tracking-tighter" style={{ color: COLORS.magenta }}>${drop.drop_amount}</span>
@@ -225,7 +268,7 @@ function CdDashboard() {
                               </div>
                               {drop.submitted_at && (
                                 <div className="text-xs mb-3 md:mb-4 italic" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                  Submitted: {formatDateTime(drop.date, drop.submitted_at)}
+                                  Submitted: {formatPSTDate(drop.date, { month: 'short', day: 'numeric', year: 'numeric' })}
                                 </div>
                               )}
                               {drop.variance !== undefined && drop.variance !== null && (
@@ -240,6 +283,23 @@ function CdDashboard() {
                                 <div className="mb-3 md:mb-4 p-2 bg-white rounded border border-gray-200">
                                   <span className="text-xs font-bold uppercase mr-2" style={{ color: COLORS.gray, fontSize: '14px' }}>Notes:</span>
                                   <span className="text-xs italic" style={{ color: COLORS.gray, fontSize: '14px' }}>{drop.notes}</span>
+                                </div>
+                              )}
+                              {drop.ignore_reason && (
+                                <div className="mb-3 md:mb-4 p-2 bg-red-50 rounded border border-red-200">
+                                  <span className="text-xs font-bold uppercase mr-2" style={{ color: COLORS.gray, fontSize: '14px' }}>Ignore Reason:</span>
+                                  <span className="text-xs italic" style={{ color: COLORS.gray, fontSize: '14px' }}>{drop.ignore_reason}</span>
+                                </div>
+                              )}
+                              {!drop.ignored && (
+                                <div className="mb-3 md:mb-4">
+                                  <button
+                                    onClick={() => setIgnoreModal({ show: true, item: drop, reason: '' })}
+                                    className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
+                                    style={{ backgroundColor: COLORS.gray, fontSize: '14px' }}
+                                  >
+                                    Ignore Cash Drop
+                                  </button>
                                 </div>
                               )}
                               <div className="grid grid-cols-2 gap-2 mt-auto pt-4 border-t border-gray-200">
@@ -260,7 +320,13 @@ function CdDashboard() {
                         {/* Drawer Card */}
                         <div className="h-full">
                           {drawer ? (
-                            <div className="h-full flex flex-col p-4 md:p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+                            <div className="h-full flex flex-col p-4 md:p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm relative">
+                              {/* Ignored Ribbon - Show if corresponding cash drop is ignored */}
+                              {drop && drop.ignored && (
+                                <div className="absolute top-0 right-0 bg-red-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>
+                                  IGNORED
+                                </div>
+                              )}
                               <div className="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-4 gap-2">
                                 <span className="text-xs font-bold px-2 py-0.5 rounded uppercase" style={{ backgroundColor: COLORS.yellowGreen + '20', color: COLORS.yellowGreen, fontSize: '14px' }}>Register {drawer.workstation}</span>
                                 <span className="text-xl md:text-2xl font-bold tracking-tighter" style={{ color: COLORS.yellowGreen }}>${drawer.total_cash}</span>
@@ -293,6 +359,73 @@ function CdDashboard() {
         </div>
       </div>
       
+      {/* Status Message */}
+      {statusMessage.show && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
+          statusMessage.type === 'error' ? 'bg-red-100 border-l-4 border-red-500' : 
+          statusMessage.type === 'success' ? 'bg-green-100 border-l-4 border-green-500' : 
+          'bg-blue-100 border-l-4 border-blue-500'
+        }`} style={{ fontFamily: 'Calibri, Verdana, sans-serif' }}>
+          <p className={`font-bold ${statusMessage.type === 'error' ? 'text-red-700' : statusMessage.type === 'success' ? 'text-green-700' : 'text-blue-700'}`} style={{ fontSize: '14px' }}>
+            {statusMessage.text}
+          </p>
+        </div>
+      )}
+
+      {/* Ignore Modal */}
+      {ignoreModal.show && ignoreModal.item && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
+          <div className="relative max-w-md w-full bg-white rounded-lg shadow-2xl overflow-hidden" style={{ fontFamily: 'Calibri, Verdana, sans-serif' }}>
+            <div className="p-4 text-white font-black uppercase tracking-widest" style={{ backgroundColor: COLORS.magenta, fontSize: '18px' }}>
+              Ignore Cash Drop
+            </div>
+            <div className="p-6">
+              <p className="mb-4 font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                Please provide a reason for ignoring this cash drop:
+              </p>
+              <div className="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <div className="flex justify-between mb-2">
+                  <span className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>Date:</span>
+                  <span style={{ color: COLORS.gray, fontSize: '14px' }}>{ignoreModal.item.date}</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>Register:</span>
+                  <span style={{ color: COLORS.magenta, fontSize: '14px' }}>{ignoreModal.item.workstation}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>Amount:</span>
+                  <span style={{ color: COLORS.yellowGreen, fontSize: '14px' }}>${ignoreModal.item.drop_amount}</span>
+                </div>
+              </div>
+              <textarea
+                value={ignoreModal.reason}
+                onChange={(e) => setIgnoreModal(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder="Enter reason for ignoring this cash drop..."
+                rows="4"
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-pink-500 outline-none mb-4"
+                style={{ fontSize: '14px', color: COLORS.gray }}
+              />
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={handleIgnoreCashDrop}
+                  className="px-6 py-2 rounded-lg text-white font-black transition-all active:scale-95"
+                  style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
+                >
+                  Confirm Ignore
+                </button>
+                <button
+                  onClick={() => setIgnoreModal({ show: false, item: null, reason: '' })}
+                  className="px-6 py-2 rounded-lg text-white font-black transition-all active:scale-95"
+                  style={{ backgroundColor: COLORS.gray, fontSize: '14px' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }

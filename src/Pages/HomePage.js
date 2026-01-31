@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 
 // Color constants
@@ -10,6 +10,10 @@ const COLORS = {
 };
 
 function Homepage() {
+    // Set page title
+    useEffect(() => {
+        document.title = 'Home';
+    }, []);
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6 py-8" style={{ fontFamily: 'Calibri, Verdana, sans-serif' }}>
             <div className="text-center max-w-2xl">
