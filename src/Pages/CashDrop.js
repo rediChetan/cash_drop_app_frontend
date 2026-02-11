@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { API_ENDPOINTS } from '../config/api';
 import { getPSTDate } from '../utils/dateUtils';
 
 function CashDrop() {
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Set page title
   useEffect(() => {
@@ -33,6 +34,7 @@ function CashDrop() {
   });
 
   const [labelImage, setLabelImage] = useState(null);
+  const [labelImageUrl, setLabelImageUrl] = useState(null); // For displaying existing images
   const [cashDropDenominations, setCashDropDenominations] = useState(null);
   const [remainingCashInDrawer, setRemainingCashInDrawer] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -95,12 +97,15 @@ function CashDrop() {
         const token = sessionStorage.getItem('access_token');
         if (!token) return;
         
-        // Check if draftId is in URL query params
-        const queryParams = new URLSearchParams(window.location.search);
+        // Check if draftId is in URL query params using React Router's location
+        const queryParams = new URLSearchParams(location.search);
         const draftIdFromUrl = queryParams.get('draftId');
         
         // Only load draft if draftId is in URL (from Edit Draft button)
         if (!draftIdFromUrl) {
+          // Clear any existing draft state if no draftId in URL
+          setDraftId(null);
+          setDraftDrawerId(null);
           return; // No draftId in URL, start with fresh form
         }
         
@@ -110,7 +115,9 @@ function CashDrop() {
         });
         
         if (!dropResponse.ok) {
-          showStatusMessage('Draft not found.', 'error');
+          const errorData = await dropResponse.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('Error fetching draft:', dropResponse.status, errorData);
+          showStatusMessage(errorData.error || `Draft not found (Status: ${dropResponse.status})`, 'error');
           return;
         }
         
@@ -136,6 +143,26 @@ function CashDrop() {
           if (drawerResponse.ok) {
             drawerDraft = await drawerResponse.json();
             setDraftDrawerId(drawerDraft.id);
+          } else {
+            console.warn('Drawer not found for draft:', draft.drawer_entry_id);
+          }
+        } else {
+          // If no drawer_entry_id, try to find drawer by matching workstation/shift/date
+          const today = getPSTDate();
+          const drawerResponse = await fetch(`${API_ENDPOINTS.CASH_DRAWER}?datefrom=${draft.date || today}&dateto=${draft.date || today}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (drawerResponse.ok) {
+            const drawers = await drawerResponse.json();
+            drawerDraft = drawers.find(d => 
+              d.workstation === draft.workstation && 
+              d.shift_number === draft.shift_number && 
+              d.date === draft.date &&
+              d.status === 'drafted'
+            );
+            if (drawerDraft) {
+              setDraftDrawerId(drawerDraft.id);
+            }
           }
         }
         
@@ -179,6 +206,14 @@ function CashDrop() {
           pennyRolls: drawerDraft ? (drawerDraft.penny_rolls && drawerDraft.penny_rolls !== 0 ? drawerDraft.penny_rolls : '') : ''
         }));
         
+        // Load existing image if present
+        if (draft.label_image_url) {
+          setLabelImageUrl(draft.label_image_url);
+        } else {
+          setLabelImageUrl(null);
+        }
+        setLabelImage(null); // Clear any new file selection
+        
         showStatusMessage('Retrieved draft details for editing.', 'info');
       } catch (error) {
         console.error('Error loading draft:', error);
@@ -187,7 +222,7 @@ function CashDrop() {
     };
     
     loadDraft();
-  }, [navigate]);
+  }, [navigate, location.search]);
 
   useEffect(() => {
     calculateDenominations();
@@ -271,7 +306,23 @@ function CashDrop() {
         date: formData.date,
         starting_cash: parseFloat(formData.startingCash),
         total_cash: parseFloat(calculateTotalCash()),
-        ...Object.fromEntries(DENOMINATION_CONFIG.map(d => [d.field === 'halfDollars' ? 'half_dollars' : d.field, formData[d.field]]))
+        status: 'drafted',
+        hundreds: parseFloat(formData.hundreds || 0),
+        fifties: parseFloat(formData.fifties || 0),
+        twenties: parseFloat(formData.twenties || 0),
+        tens: parseFloat(formData.tens || 0),
+        fives: parseFloat(formData.fives || 0),
+        twos: parseFloat(formData.twos || 0),
+        ones: parseFloat(formData.ones || 0),
+        half_dollars: parseFloat(formData.halfDollars || 0),
+        quarters: parseFloat(formData.quarters || 0),
+        dimes: parseFloat(formData.dimes || 0),
+        nickels: parseFloat(formData.nickels || 0),
+        pennies: parseFloat(formData.pennies || 0),
+        quarter_rolls: parseFloat(formData.quarterRolls || 0),
+        dime_rolls: parseFloat(formData.dimeRolls || 0),
+        nickel_rolls: parseFloat(formData.nickelRolls || 0),
+        penny_rolls: parseFloat(formData.pennyRolls || 0)
       };
 
       let dRes;
@@ -289,7 +340,10 @@ function CashDrop() {
         });
       }
 
-      if (!dRes.ok) throw new Error('Failed to save Drawer draft.');
+      if (!dRes.ok) {
+        const errorData = await dRes.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to save Drawer draft.');
+      }
       const dResult = await dRes.json();
       setDraftDrawerId(dResult.id);
 
@@ -343,6 +397,7 @@ function CashDrop() {
         notes: ''
       });
       setLabelImage(null);
+      setLabelImageUrl(null);
       setDraftId(null);
       setDraftDrawerId(null);
       
@@ -400,6 +455,7 @@ function CashDrop() {
         notes: ''
       });
       setLabelImage(null);
+      setLabelImageUrl(null);
       setDraftId(null);
       setDraftDrawerId(null);
       
@@ -429,23 +485,54 @@ function CashDrop() {
         }
       }
 
-      // 1. Save Drawer
+      // 1. Update existing drawer if draft exists, otherwise create new one
       const drawerData = {
         workstation: formData.workStation,
         shift_number: formData.shiftNumber,
         date: formData.date,
         starting_cash: parseFloat(formData.startingCash),
         total_cash: parseFloat(calculateTotalCash()),
-        ...Object.fromEntries(DENOMINATION_CONFIG.map(d => [d.field === 'halfDollars' ? 'half_dollars' : d.field, formData[d.field]]))
+        status: 'submitted',
+        hundreds: parseFloat(formData.hundreds || 0),
+        fifties: parseFloat(formData.fifties || 0),
+        twenties: parseFloat(formData.twenties || 0),
+        tens: parseFloat(formData.tens || 0),
+        fives: parseFloat(formData.fives || 0),
+        twos: parseFloat(formData.twos || 0),
+        ones: parseFloat(formData.ones || 0),
+        half_dollars: parseFloat(formData.halfDollars || 0),
+        quarters: parseFloat(formData.quarters || 0),
+        dimes: parseFloat(formData.dimes || 0),
+        nickels: parseFloat(formData.nickels || 0),
+        pennies: parseFloat(formData.pennies || 0),
+        quarter_rolls: parseFloat(formData.quarterRolls || 0),
+        dime_rolls: parseFloat(formData.dimeRolls || 0),
+        nickel_rolls: parseFloat(formData.nickelRolls || 0),
+        penny_rolls: parseFloat(formData.pennyRolls || 0)
       };
 
-      const dRes = await fetch(API_ENDPOINTS.CASH_DRAWER, {
+      let dRes;
+      if (draftDrawerId) {
+        // Update existing drawer
+        dRes = await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(draftDrawerId), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(drawerData),
+        });
+      } else {
+        // Create new drawer
+        dRes = await fetch(API_ENDPOINTS.CASH_DRAWER, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(drawerData),
       });
+      }
 
-      if (!dRes.ok) throw new Error('Failed to save Drawer data.');
+      if (!dRes.ok) {
+        const errorData = await dRes.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Drawer save error:', errorData);
+        throw new Error(errorData.error || 'Failed to save Drawer data.');
+      }
       const dResult = await dRes.json();
 
       // 2. Save Drop with Image
@@ -478,10 +565,10 @@ function CashDrop() {
       } else {
         // Create new
         dropRes = await fetch(API_ENDPOINTS.CASH_DROP, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: dropForm,
-        });
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: dropForm,
+      });
       }
 
       if (!dropRes.ok) throw new Error('Failed to save Cash Drop & Image.');
@@ -536,7 +623,7 @@ function CashDrop() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8 p-4 bg-gray-50 rounded-lg">
             {/* Left Div: Input Fields */}
             <div className="space-y-3">
-              <div className="flex flex-col">
+            <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Shift Number</label>
                 <select name="shiftNumber" value={formData.shiftNumber} onChange={handleChange} className="p-2 bg-white border-b border-gray-300 focus:border-pink-600 outline-none" style={{ fontSize: '14px' }}>
                   <option value="">Select Shift</option>
@@ -544,8 +631,8 @@ function CashDrop() {
                     <option key={idx} value={shift}>{shift}</option>
                   ))}
                 </select>
-              </div>
-              <div className="flex flex-col">
+            </div>
+            <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Register Number</label>
                 <select name="workStation" value={formData.workStation} onChange={handleChange} className="p-2 bg-white border-b border-gray-300 focus:border-pink-600 outline-none" style={{ fontSize: '14px' }}>
                   <option value="">Select Register</option>
@@ -553,8 +640,8 @@ function CashDrop() {
                     <option key={idx} value={workstation}>{workstation}</option>
                   ))}
                 </select>
-              </div>
-              <div className="flex flex-col">
+            </div>
+            <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.magenta, fontSize: '14px' }}>Cash Received on Receipt</label>
                 <input type="text" name="cashReceivedOnReceipt" value={formData.cashReceivedOnReceipt} onChange={handleChange} className="p-2 bg-white border-b border-gray-300 font-bold focus:border-pink-600 outline-none" style={{ fontSize: '14px', color: COLORS.magenta }} />
               </div>
@@ -562,15 +649,15 @@ function CashDrop() {
             
             {/* Right Div: Display Only Fields */}
             <div className="space-y-3">
-              <div className="flex flex-col">
+            <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Employee</label>
                 <div className="p-2 bg-transparent border-b border-gray-300 font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>{formData.employeeName}</div>
-              </div>
-              <div className="flex flex-col">
+            </div>
+            <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Date</label>
                 <input type="date" name="date" value={formData.date} onChange={handleChange} max={getPSTDate()} className="p-2 bg-white border-b border-gray-300 font-bold focus:border-pink-600 outline-none" style={{ fontSize: '14px', color: COLORS.gray }} />
-              </div>
-              <div className="flex flex-col">
+            </div>
+            <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Starting Cash</label>
                 <div className="p-2 bg-transparent border-b border-gray-300 font-bold" style={{ fontSize: '14px', color: COLORS.magenta }}>${formData.startingCash}</div>
               </div>
@@ -621,12 +708,46 @@ function CashDrop() {
             <div className="space-y-4 md:space-y-6">
               <div className="bg-white border rounded-lg p-4 md:p-6">
                 <h3 className="font-black uppercase mb-4 md:mb-6 tracking-widest border-b pb-2" style={{ fontSize: '18px', color: COLORS.gray }}>3. Cash Drop Receipt (Optional)</h3>
-                <label className={`group flex flex-col items-center justify-center w-full h-32 md:h-40 border-2 border-dashed rounded-lg cursor-pointer transition-all ${labelImage ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-pink-500'}`}>
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <p className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>{labelImage ? "✅ Image Ready" : "Upload Cash Drop Receipt (Optional)"}</p>
-                    <p className="mt-1" style={{ color: COLORS.gray, fontSize: '14px' }}>{labelImage ? labelImage.name : "PNG, JPG or JPEG"}</p>
+                {labelImageUrl && !labelImage && (
+                  <div className="mb-4">
+                    <p className="font-bold mb-2" style={{ color: COLORS.gray, fontSize: '14px' }}>Existing Image:</p>
+                    <img 
+                      src={labelImageUrl} 
+                      alt="Cash Drop Receipt" 
+                      className="w-full h-auto rounded-lg border border-gray-300 max-h-64 object-contain"
+                      onError={(e) => {
+                        console.error('Error loading image:', labelImageUrl);
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLabelImageUrl(null)}
+                      className="mt-2 px-3 py-1 text-white font-bold rounded transition"
+                      style={{ backgroundColor: '#EF4444', fontSize: '12px' }}
+                    >
+                      Remove Image
+                    </button>
                   </div>
-                  <input type="file" className="hidden" onChange={(e) => setLabelImage(e.target.files[0])} accept="image/*" />
+                )}
+                <label className={`group flex flex-col items-center justify-center w-full h-32 md:h-40 border-2 border-dashed rounded-lg cursor-pointer transition-all ${(labelImage || labelImageUrl) ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-pink-500'}`}>
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <p className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                      {(labelImage || labelImageUrl) ? "✅ Image Ready" : "Upload Cash Drop Receipt (Optional)"}
+                    </p>
+                    <p className="mt-1" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                      {labelImage ? labelImage.name : (labelImageUrl ? "Existing image loaded" : "PNG, JPG or JPEG")}
+                    </p>
+                  </div>
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    onChange={(e) => {
+                      setLabelImage(e.target.files[0]);
+                      setLabelImageUrl(null); // Clear existing image URL when new file is selected
+                    }} 
+                    accept="image/*" 
+                  />
                 </label>
               </div>
 
@@ -645,11 +766,11 @@ function CashDrop() {
               </div>
 
               <div className="space-y-3">
-                {isSubmitValid() ? (
+              {isSubmitValid() ? (
                   <button onClick={handleSubmit} className="w-full py-3 md:py-4 text-white font-black rounded-lg shadow-lg transform transition active:scale-95 uppercase tracking-widest" style={{ backgroundColor: COLORS.magenta, fontSize: '18px' }}>
-                    Finalize Cash Drop
-                  </button>
-                ) : (
+                  Finalize Cash Drop
+                </button>
+              ) : (
                 <div className="p-4 bg-red-50 border border-red-100 rounded-lg">
                   <p className="font-black text-red-500 leading-relaxed" style={{ fontSize: '14px' }}>
                     {parseFloat(calculateDropAmount()) <= 0 && "• Drop Amount must be positive"}<br/>
@@ -659,7 +780,7 @@ function CashDrop() {
                     {formData.cashReceivedOnReceipt === '' && "• Cash Received on Receipt is required"}<br/>
                   </p>
                 </div>
-                )}
+              )}
                 <div className="grid grid-cols-2 gap-3">
                   <button 
                     onClick={handleSaveDraft} 
@@ -681,10 +802,10 @@ function CashDrop() {
                   )}
                 </div>
               </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </div>
   );
 }
