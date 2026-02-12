@@ -268,7 +268,7 @@ function CdDashboard() {
               </div>
               <button onClick={() => fetchData(selectedDateFrom, selectedDateTo)} className="text-white px-4 md:px-5 py-2 rounded font-bold transition-all" style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}>Fetch Data</button>
 
-              <div className="flex flex-col">
+            {/*  <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Status</label>
                 <select
                   value={statusFilter}
@@ -284,7 +284,7 @@ function CdDashboard() {
                   <option value="bank_dropped">Bank Dropped</option>
                 </select>
               </div>
-              
+            */}              
               <div className="flex gap-1 border-l pl-2 md:pl-3 border-gray-300">
                 <button onClick={handleWTD} className="px-2 md:px-3 py-2 bg-white border border-gray-300 rounded font-bold hover:bg-gray-50 transition-colors" style={{ fontSize: '14px' }}>WTD</button>
                 <button onClick={handleMTD} className="px-2 md:px-3 py-2 bg-white border border-gray-300 rounded font-bold hover:bg-gray-50 transition-colors" style={{ fontSize: '14px' }}>MTD</button>

@@ -296,7 +296,7 @@ function CashDropValidation() {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50 font-black uppercase border-b" style={{ color: COLORS.gray }}>
-                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Date / Register</th>
+                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Date / Shift / Register / User</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Cash Drop</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Cash Drop Receipt Amount</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Variance</th>
@@ -321,8 +321,8 @@ function CashDropValidation() {
                   <React.Fragment key={item.id}>
                     <tr className="border-b hover:bg-pink-50/30 transition-colors">
                       <td className="p-2 md:p-4">
-                        <div className="font-black" style={{ fontSize: '14px' }}>{formatPSTDate(item.date)}</div>
-                        <div className="font-bold uppercase" style={{ color: COLORS.magenta, fontSize: '14px' }}>{item.workstation} | {item.user_name}</div>
+                        <div className="font-black" style={{ fontSize: '14px' }}>{formatPSTDate(item.date)}</div> 
+                        <div className="font-bold uppercase" style={{ color: COLORS.magenta, fontSize: '14px' }}>{item.shift_number} | {item.workstation} | {item.user_name}</div>
                       </td>
                       <td className="p-2 md:p-4">
                         {item.label_image_url ? (

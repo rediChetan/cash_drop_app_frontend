@@ -594,7 +594,7 @@ const BankDrop = () => {
                 }}
                 title="Mark all selected pending drops as bank dropped in one batch"
               >
-                {loadingDropBatch ? 'Dropping...' : `Drop batch (${selectedPendingCount})`}
+                {loadingDropBatch ? 'Dropping...' : `Drop Batch (${selectedPendingCount})`}
               </button>
             </div>
           )}

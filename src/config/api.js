@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
   CASH_DRAWER: `${API_BASE_URL}/api/cash-drop-app1/cash-drawer`,
   CASH_DRAWER_BY_ID: (id) => `${API_BASE_URL}/api/cash-drop-app1/cash-drawer/${id}`,
   CASH_DROP: `${API_BASE_URL}/api/cash-drop-app1/cash-drop`,
+  CASH_DROP_VALIDATE: `${API_BASE_URL}/api/cash-drop-app1/cash-drop/validate`,
   CASH_DROP_BY_ID: (id) => `${API_BASE_URL}/api/cash-drop-app1/cash-drop/${id}`,
   DELETE_CASH_DROP: (id) => `${API_BASE_URL}/api/cash-drop-app1/cash-drop/${id}`,
   CASH_DROP_RECONCILER: `${API_BASE_URL}/api/cash-drop-app1/cash-drop-reconciler`,

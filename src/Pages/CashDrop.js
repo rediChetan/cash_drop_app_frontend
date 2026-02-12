@@ -423,7 +423,10 @@ function CashDrop() {
         });
       }
 
-      if (!dropRes.ok) throw new Error('Failed to save draft.');
+      if (!dropRes.ok) {
+        const errorData = await dropRes.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save draft.');
+      }
       const dropResult = await dropRes.json();
       setDraftId(dropResult.id);
       
@@ -516,7 +519,25 @@ function CashDrop() {
         }
       }
 
-      // 1. Update existing drawer if draft exists, otherwise create new one
+      // Validate cash drop can be submitted (no duplicate) before creating/updating drawer
+      const validateRes = await fetch(API_ENDPOINTS.CASH_DROP_VALIDATE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          workstation: formData.workStation,
+          shift_number: formData.shiftNumber,
+          date: formData.date,
+          ...(draftId != null && { draftId }),
+        }),
+      });
+      if (!validateRes.ok) {
+        const errorData = await validateRes.json().catch(() => ({ error: 'Cash drop validation failed.' }));
+        showStatusMessage(errorData.error || 'Cash drop validation failed.', 'error');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 1. Update existing drawer if draft exists, otherwise create new one (only after drop is validated)
       const drawerData = {
         workstation: formData.workStation,
         shift_number: formData.shiftNumber,
@@ -602,14 +623,18 @@ function CashDrop() {
       });
       }
 
-      if (!dropRes.ok) throw new Error('Failed to save Cash Drop & Image.');
+      if (!dropRes.ok) {
+        const errorData = await dropRes.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save Cash Drop & Image.');
+      }
       
       // Clear draft IDs
       setDraftId(null);
       setDraftDrawerId(null);
       
       // Success - navigate immediately
-      navigate('/cd-dashboard');
+      showStatusMessage('Cash Drop submitted successfully.', 'success');
+      setTimeout(() => navigate('/cd-dashboard'), 500);
 
     } catch (err) {
       setIsSubmitting(false);
