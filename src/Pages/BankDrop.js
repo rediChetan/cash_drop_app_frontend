@@ -620,7 +620,7 @@ const BankDrop = () => {
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Date / Register / Shift</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Reconciled Amount</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Cash Drop Receipt Amount</th>
-                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Variance</th>
+                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Reconcile Delta</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Bank Dropped</th>
               </tr>
             </thead>
@@ -668,8 +668,8 @@ const BankDrop = () => {
                     )}
                   </td>
                   <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>${item.ws_label_amount}</td>
-                  <td className={`p-2 md:p-4 font-black ${parseFloat(item.variance) !== 0 ? 'text-red-500' : 'text-gray-300'}`} style={{ fontSize: '14px' }}>
-                    ${item.variance}
+                  <td className={`p-2 md:p-4 font-black ${parseFloat(item.reconcile_delta) !== 0 ? 'text-red-500' : 'text-gray-300'}`} style={{ fontSize: '14px' }}>
+                    ${item.reconcile_delta}
                   </td>
                   <td className="p-2 md:p-4">
                     {item.bank_dropped ? (

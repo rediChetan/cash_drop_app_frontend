@@ -14,7 +14,7 @@ function CdDashboard() {
   const [error, setError] = useState('');
   const [ignoreModal, setIgnoreModal] = useState({ show: false, item: null, reason: '' });
   const [ignoreDrawerModal, setIgnoreDrawerModal] = useState({ show: false, item: null });
-  const [deleteDraftModal, setDeleteDraftModal] = useState({ show: false, item: null });
+  const [deleteDraftModal, setDeleteDraftModal] = useState({ show: false, item: null, type: 'drop' }); // type: 'drop' | 'drawer'
   const [statusMessage, setStatusMessage] = useState({ show: false, text: '', type: 'info' });
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'drafted' | 'submitted' | 'ignored' | 'reconciled' | 'bank_dropped'
 
@@ -220,16 +220,21 @@ function CdDashboard() {
   const handleDeleteDraft = async () => {
     if (!deleteDraftModal.item) return;
 
+    const isDrawer = deleteDraftModal.type === 'drawer';
+    const url = isDrawer
+      ? API_ENDPOINTS.CASH_DRAWER_BY_ID(deleteDraftModal.item.id)
+      : API_ENDPOINTS.DELETE_CASH_DROP(deleteDraftModal.item.id);
+
     try {
       const token = sessionStorage.getItem('access_token');
-      const response = await fetch(API_ENDPOINTS.DELETE_CASH_DROP(deleteDraftModal.item.id), {
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
       if (response.ok) {
         showStatusMessage('Draft deleted successfully.', 'success');
-        setDeleteDraftModal({ show: false, item: null });
+        setDeleteDraftModal({ show: false, item: null, type: 'drop' });
         fetchData(selectedDateFrom, selectedDateTo);
       } else {
         const error = await response.json();
@@ -426,7 +431,7 @@ function CdDashboard() {
                                     Edit Draft
                                   </button>
                                   <button
-                                    onClick={() => setDeleteDraftModal({ show: true, item: drop })}
+                                    onClick={() => setDeleteDraftModal({ show: true, item: drop, type: 'drop' })}
                                     className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
                                     style={{ backgroundColor: '#EF4444', fontSize: '14px' }}
                                   >
@@ -472,7 +477,25 @@ function CdDashboard() {
                               <div className="text-xs font-bold uppercase mb-3 md:mb-4" style={{ color: COLORS.gray, fontSize: '14px' }}>
                                 Initial: ${drawer.starting_cash} | {drawer.user_name}
                               </div>
-                              {drawer.status !== 'ignored' && (
+                              {((drop && drop.status === 'drafted') || (!drop && drawer.status === 'drafted')) && (
+                                <div className="mb-3 md:mb-4 space-y-2">
+                                  <button
+                                    onClick={() => navigate(drop ? `/cash-drop?draftId=${drop.id}` : `/cash-drop?draftDrawerId=${drawer.id}`)}
+                                    className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
+                                    style={{ backgroundColor: COLORS.yellowGreen, fontSize: '14px' }}
+                                  >
+                                    Edit Draft
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteDraftModal({ show: true, item: drawer, type: 'drawer' })}
+                                    className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
+                                    style={{ backgroundColor: '#EF4444', fontSize: '14px' }}
+                                  >
+                                    Delete Draft
+                                  </button>
+                                </div>
+                              )}
+                              {drawer.status !== 'ignored' && !((drop && drop.status === 'drafted') || (!drop && drawer.status === 'drafted')) && (
                                 <div className="mb-3 md:mb-4">
                                   <button
                                     onClick={() => setIgnoreDrawerModal({ show: true, item: drawer })}
@@ -584,7 +607,7 @@ function CdDashboard() {
               </div>
               <div className="p-6">
                 <p className="mb-4 font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                  Are you sure you want to ignore this cash drawer? Its status will be set to ignored.
+                  Are you sure you want to ignore this cash drawer? The drawer and any linked cash drop will be set to ignored.
                 </p>
                 <div className="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                   <div className="flex justify-between mb-2">
@@ -627,7 +650,9 @@ function CdDashboard() {
             <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md" style={{ fontFamily: 'Calibri, Verdana, sans-serif' }}>
               <h3 className="text-lg font-bold mb-4" style={{ color: COLORS.magenta, fontSize: '18px' }}>Delete Draft</h3>
               <p className="mb-4" style={{ fontSize: '14px', color: COLORS.gray }}>
-                Are you sure you want to delete this draft? This action cannot be undone.
+                {deleteDraftModal.type === 'drawer'
+                  ? 'This will delete the drawer draft and the linked cash drop draft. This action cannot be undone.'
+                  : 'This will delete the cash drop draft and the linked drawer draft. This action cannot be undone.'}
               </p>
               {deleteDraftModal.item && (
                 <div className="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
@@ -641,7 +666,9 @@ function CdDashboard() {
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>Amount:</span>
-                    <span style={{ color: COLORS.yellowGreen, fontSize: '14px' }}>${deleteDraftModal.item.drop_amount}</span>
+                    <span style={{ color: COLORS.yellowGreen, fontSize: '14px' }}>
+                      ${deleteDraftModal.type === 'drawer' ? deleteDraftModal.item.total_cash : deleteDraftModal.item.drop_amount}
+                    </span>
                   </div>
                 </div>
               )}
@@ -654,7 +681,7 @@ function CdDashboard() {
                   Delete Draft
                 </button>
                 <button
-                  onClick={() => setDeleteDraftModal({ show: false, item: null })}
+                  onClick={() => setDeleteDraftModal({ show: false, item: null, type: 'drop' })}
                   className="px-6 py-2 rounded-lg text-white font-black transition-all active:scale-95"
                   style={{ backgroundColor: COLORS.gray, fontSize: '14px' }}
                 >

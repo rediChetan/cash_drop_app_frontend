@@ -97,19 +97,62 @@ function CashDrop() {
         const token = sessionStorage.getItem('access_token');
         if (!token) return;
         
-        // Check if draftId is in URL query params using React Router's location
+        // Check if draftId or draftDrawerId is in URL query params (from Edit Draft button)
         const queryParams = new URLSearchParams(location.search);
         const draftIdFromUrl = queryParams.get('draftId');
+        const draftDrawerIdFromUrl = queryParams.get('draftDrawerId');
         
-        // Only load draft if draftId is in URL (from Edit Draft button)
-        if (!draftIdFromUrl) {
-          // Clear any existing draft state if no draftId in URL
+        if (draftDrawerIdFromUrl && !draftIdFromUrl) {
+          // Load standalone drawer draft
+          const drawerResponse = await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(draftDrawerIdFromUrl), {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!drawerResponse.ok) {
+            showStatusMessage('Drawer draft not found.', 'error');
+            return;
+          }
+          const drawerDraft = await drawerResponse.json();
+          if (drawerDraft.status !== 'drafted') {
+            showStatusMessage('This drawer is not a draft.', 'error');
+            return;
+          }
+          setDraftDrawerId(drawerDraft.id);
           setDraftId(null);
-          setDraftDrawerId(null);
-          return; // No draftId in URL, start with fresh form
+          let formattedDate = (drawerDraft.date && typeof drawerDraft.date === 'string') ? drawerDraft.date.split('T')[0] : getPSTDate();
+          setFormData(prev => ({
+            ...prev,
+            shiftNumber: drawerDraft.shift_number || '',
+            workStation: drawerDraft.workstation || '',
+            date: formattedDate,
+            startingCash: drawerDraft.starting_cash != null ? String(drawerDraft.starting_cash) : prev.startingCash,
+            hundreds: drawerDraft.hundreds || 0,
+            fifties: drawerDraft.fifties || 0,
+            twenties: drawerDraft.twenties || 0,
+            tens: drawerDraft.tens || 0,
+            fives: drawerDraft.fives || 0,
+            twos: drawerDraft.twos || 0,
+            ones: drawerDraft.ones || 0,
+            halfDollars: drawerDraft.half_dollars || 0,
+            quarters: drawerDraft.quarters || 0,
+            dimes: drawerDraft.dimes || 0,
+            nickels: drawerDraft.nickels || 0,
+            pennies: drawerDraft.pennies || 0,
+            quarterRolls: drawerDraft.quarter_rolls || 0,
+            dimeRolls: drawerDraft.dime_rolls || 0,
+            nickelRolls: drawerDraft.nickel_rolls || 0,
+            pennyRolls: drawerDraft.penny_rolls || 0
+          }));
+          showStatusMessage('Retrieved drawer draft for editing.', 'info');
+          return;
         }
         
-        // Fetch the specific draft by ID
+        if (!draftIdFromUrl) {
+          setDraftId(null);
+          setDraftDrawerId(null);
+          return;
+        }
+        
+        // Fetch the specific drop draft by ID
         const dropResponse = await fetch(API_ENDPOINTS.CASH_DROP_BY_ID(draftIdFromUrl), {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -428,19 +471,7 @@ function CashDrop() {
         const error = await dropRes.json();
         throw new Error(error.error || 'Failed to delete draft.');
       }
-
-      // Also delete cash drawer if it exists
-      if (draftDrawerId) {
-        try {
-          await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(draftDrawerId), {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-        } catch (err) {
-          console.error('Error deleting drawer:', err);
-          // Continue even if drawer deletion fails
-        }
-      }
+      // Backend deletes the linked drawer draft when drop draft is deleted
 
       // Reset form
       setFormData({
