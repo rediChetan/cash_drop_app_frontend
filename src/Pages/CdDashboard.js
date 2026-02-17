@@ -17,15 +17,33 @@ function CdDashboard() {
   const [deleteDraftModal, setDeleteDraftModal] = useState({ show: false, item: null, type: 'drop' }); // type: 'drop' | 'drawer'
   const [statusMessage, setStatusMessage] = useState({ show: false, text: '', type: 'info' });
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'drafted' | 'submitted' | 'ignored' | 'reconciled' | 'bank_dropped'
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   // Set page title
   useEffect(() => {
     document.title = 'Cash Drop Dashboard';
   }, []);
 
+  useEffect(() => {
+    const fetchUser = async () => {
+      const token = sessionStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const res = await fetch(API_ENDPOINTS.CURRENT_USER, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          const user = await res.json();
+          setCurrentUserId(user.id ?? null);
+        }
+      } catch (e) {
+        console.error('Fetch current user:', e);
+      }
+    };
+    fetchUser();
+  }, []);
+
   const COLORS = {
     magenta: '#AA056C',
-    yellowGreen: '#C4CB07',
+    yellowGreen: '#22C55E',
     lightPink: '#F46690',
     gray: '#64748B'
   };
@@ -385,9 +403,14 @@ function CdDashboard() {
                               <div className="text-xs font-bold uppercase mb-2" style={{ color: COLORS.gray, fontSize: '14px' }}>
                                 Register: {drop.workstation} | {drop.user_name}
                               </div>
+                              {drop.status === 'drafted' && drop.created_at && (
+                                <div className="text-xs mb-3 md:mb-4 italic" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                  Saved: {formatDateTime(null, drop.created_at)}
+                                </div>
+                              )}
                               {drop.submitted_at && (
                                 <div className="text-xs mb-3 md:mb-4 italic" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                  Submitted: {formatPSTDate(drop.date, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  Submitted: {formatDateTime(drop.date, drop.submitted_at)} (PST)
                                 </div>
                               )}
                               {drop.variance !== undefined && drop.variance !== null && (
@@ -410,7 +433,7 @@ function CdDashboard() {
                                   <span className="text-xs italic" style={{ color: COLORS.gray, fontSize: '14px' }}>{drop.ignore_reason}</span>
                                 </div>
                               )}
-                              {drop.status !== 'drafted' && drop.status !== 'ignored' && (
+                              {drop.status !== 'drafted' && drop.status !== 'ignored' && drop.status !== 'reconciled' && (
                                 <div className="mb-3 md:mb-4">
                                   <button
                                     onClick={() => setIgnoreModal({ show: true, item: drop, reason: '' })}
@@ -423,20 +446,28 @@ function CdDashboard() {
                               )}
                               {drop.status === 'drafted' && (
                                 <div className="mb-3 md:mb-4 space-y-2">
-                                  <button
-                                    onClick={() => navigate(`/cash-drop?draftId=${drop.id}`)}
-                                    className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
-                                    style={{ backgroundColor: COLORS.yellowGreen, fontSize: '14px' }}
-                                  >
-                                    Edit Draft
-                                  </button>
-                                  <button
-                                    onClick={() => setDeleteDraftModal({ show: true, item: drop, type: 'drop' })}
-                                    className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
-                                    style={{ backgroundColor: '#EF4444', fontSize: '14px' }}
-                                  >
-                                    Delete Draft
-                                  </button>
+                                  {currentUserId == null ? (
+                                    <p className="text-xs italic" style={{ color: COLORS.gray, fontSize: '14px' }}>—</p>
+                                  ) : Number(drop.user_id) === Number(currentUserId) ? (
+                                    <>
+                                      <button
+                                        onClick={() => navigate(`/cash-drop?draftId=${drop.id}`)}
+                                        className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
+                                        style={{ backgroundColor: COLORS.yellowGreen, fontSize: '14px' }}
+                                      >
+                                        Edit Draft
+                                      </button>
+                                      <button
+                                        onClick={() => setDeleteDraftModal({ show: true, item: drop, type: 'drop' })}
+                                        className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
+                                        style={{ backgroundColor: '#EF4444', fontSize: '14px' }}
+                                      >
+                                        Delete Draft
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <p className="text-xs italic" style={{ color: COLORS.gray, fontSize: '14px' }}>Another user&apos;s draft</p>
+                                  )}
                                 </div>
                               )}
                               <div className="grid grid-cols-2 gap-2 mt-auto pt-4 border-t border-gray-200">
@@ -477,25 +508,38 @@ function CdDashboard() {
                               <div className="text-xs font-bold uppercase mb-3 md:mb-4" style={{ color: COLORS.gray, fontSize: '14px' }}>
                                 Initial: ${drawer.starting_cash} | {drawer.user_name}
                               </div>
-                              {((drop && drop.status === 'drafted') || (!drop && drawer.status === 'drafted')) && (
-                                <div className="mb-3 md:mb-4 space-y-2">
-                                  <button
-                                    onClick={() => navigate(drop ? `/cash-drop?draftId=${drop.id}` : `/cash-drop?draftDrawerId=${drawer.id}`)}
-                                    className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
-                                    style={{ backgroundColor: COLORS.yellowGreen, fontSize: '14px' }}
-                                  >
-                                    Edit Draft
-                                  </button>
-                                  <button
-                                    onClick={() => setDeleteDraftModal({ show: true, item: drawer, type: 'drawer' })}
-                                    className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
-                                    style={{ backgroundColor: '#EF4444', fontSize: '14px' }}
-                                  >
-                                    Delete Draft
-                                  </button>
+                              {(!drop && drawer.status === 'drafted' && drawer.created_at) && (
+                                <div className="text-xs mb-3 md:mb-4 italic" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                  Saved: {formatDateTime(null, drawer.created_at)}
                                 </div>
                               )}
-                              {drawer.status !== 'ignored' && !((drop && drop.status === 'drafted') || (!drop && drawer.status === 'drafted')) && (
+                              {((drop && drop.status === 'drafted') || (!drop && drawer.status === 'drafted')) && (
+                                <div className="mb-3 md:mb-4 space-y-2">
+                                  {currentUserId == null ? (
+                                    <p className="text-xs italic" style={{ color: COLORS.gray, fontSize: '14px' }}>—</p>
+                                  ) : ((drop && Number(drop.user_id) === Number(currentUserId)) || (!drop && Number(drawer.user_id) === Number(currentUserId))) ? (
+                                    <>
+                                      <button
+                                        onClick={() => navigate(drop ? `/cash-drop?draftId=${drop.id}` : `/cash-drop?draftDrawerId=${drawer.id}`)}
+                                        className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
+                                        style={{ backgroundColor: COLORS.yellowGreen, fontSize: '14px' }}
+                                      >
+                                        Edit Draft
+                                      </button>
+                                      <button
+                                        onClick={() => setDeleteDraftModal({ show: true, item: drop || drawer, type: drop ? 'drop' : 'drawer' })}
+                                        className="w-full px-3 py-2 text-white font-bold rounded transition-all active:scale-95"
+                                        style={{ backgroundColor: '#EF4444', fontSize: '14px' }}
+                                      >
+                                        Delete Draft
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <p className="text-xs italic" style={{ color: COLORS.gray, fontSize: '14px' }}>Another user&apos;s draft</p>
+                                  )}
+                                </div>
+                              )}
+                              {drawer.status !== 'ignored' && !(drop && drop.status === 'reconciled') && !((drop && drop.status === 'drafted') || (!drop && drawer.status === 'drafted')) && (
                                 <div className="mb-3 md:mb-4">
                                   <button
                                     onClick={() => setIgnoreDrawerModal({ show: true, item: drawer })}

@@ -5,7 +5,7 @@ import { API_ENDPOINTS } from "../config/api";
 // Color constants
 const COLORS = {
   magenta: '#AA056C',
-  yellowGreen: '#C4CB07',
+  yellowGreen: '#22C55E',
   lightPink: '#F46690',
   gray: '#64748B'
 };

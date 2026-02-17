@@ -11,6 +11,7 @@ function CashDropValidation() {
   const [adminCounts, setAdminCounts] = useState({});
   const [reconciliationNotes, setReconciliationNotes] = useState({});
   const [showNotesField, setShowNotesField] = useState({});
+  const [customDenominations, setCustomDenominations] = useState({}); // { [itemId]: { hundreds, fifties, ... } } when reconciling with delta
   const [loading, setLoading] = useState(false);
   const [statusMessages, setStatusMessages] = useState({});
   const [expandedRows, setExpandedRows] = useState({});
@@ -45,7 +46,7 @@ function CashDropValidation() {
 
   const COLORS = {
     magenta: '#AA056C',
-    yellowGreen: '#C4CB07',
+    yellowGreen: '#22C55E',
     lightPink: '#F46690',
     gray: '#64748B'
   };
@@ -98,6 +99,12 @@ function CashDropValidation() {
     fetchData();
   }, [showOnlyUnreconciled]);
 
+  const getCustomDenomSum = (itemId) => {
+    const denoms = customDenominations[itemId];
+    if (!denoms) return 0;
+    return DENOMINATION_CONFIG.reduce((sum, d) => sum + (parseFloat(denoms[d.name]) || 0) * d.value, 0);
+  };
+
   const handleReconcile = async (item, withDelta = false) => {
     const count = adminCounts[item.id];
     
@@ -109,16 +116,24 @@ function CashDropValidation() {
     const countedAmount = parseFloat(count);
     const cashDropAmount = parseFloat(item.system_drop_amount);
     const reconcileDelta = countedAmount - cashDropAmount;
+    const hasDelta = Math.abs(reconcileDelta) > 0.01;
 
     // For regular reconcile, amounts must match
-    if (!withDelta && Math.abs(reconcileDelta) > 0.01) {
+    if (!withDelta && hasDelta) {
       showStatusMessage(item.id, 'Counted amount must match drop amount for reconciliation. Use "Reconcile with Delta" if amounts differ.', 'error');
       return;
     }
 
-    // For reconcile with delta, show notes field if not already shown
+    // For reconcile with delta: first click shows notes + denomination editor
     if (withDelta && !showNotesField[item.id]) {
       setShowNotesField(prev => ({ ...prev, [item.id]: true }));
+      setCustomDenominations(prev => ({
+        ...prev,
+        [item.id]: DENOMINATION_CONFIG.reduce((acc, d) => {
+          acc[d.name] = item[d.name] != null ? Number(item[d.name]) : 0;
+          return acc;
+        }, {})
+      }));
       return;
     }
 
@@ -128,6 +143,15 @@ function CashDropValidation() {
       return;
     }
 
+    // When there is a delta, require custom denominations to total the counted amount
+    if (withDelta && hasDelta) {
+      const customSum = getCustomDenomSum(item.id);
+      if (Math.abs(customSum - countedAmount) > 0.02) {
+        showStatusMessage(item.id, `Custom denominations must total the counted amount ($${countedAmount.toFixed(2)}). Current total: $${customSum.toFixed(2)}`, 'error');
+        return;
+      }
+    }
+
     const requestBody = { 
       id: item.id, 
       admin_count_amount: countedAmount,
@@ -135,9 +159,15 @@ function CashDropValidation() {
       is_reconciled: true
     };
 
-    // Add notes if reconciling with delta
     if (withDelta && reconciliationNotes[item.id]) {
       requestBody.notes = reconciliationNotes[item.id];
+    }
+
+    if (withDelta && hasDelta && customDenominations[item.id]) {
+      DENOMINATION_CONFIG.forEach(d => {
+        const v = customDenominations[item.id][d.name];
+        requestBody[d.name] = typeof v === 'number' ? v : (parseFloat(v) || 0);
+      });
     }
 
     const response = await fetch(API_ENDPOINTS.CASH_DROP_RECONCILER, {
@@ -151,13 +181,17 @@ function CashDropValidation() {
 
     if (response.ok) {
       showStatusMessage(item.id, 'Record reconciled successfully', 'success');
-      // Clear notes field state
       setShowNotesField(prev => {
         const updated = { ...prev };
         delete updated[item.id];
         return updated;
       });
       setReconciliationNotes(prev => {
+        const updated = { ...prev };
+        delete updated[item.id];
+        return updated;
+      });
+      setCustomDenominations(prev => {
         const updated = { ...prev };
         delete updated[item.id];
         return updated;
@@ -317,6 +351,7 @@ function CashDropValidation() {
                 const countedAmount = parseFloat(adminCounts[item.id] || 0);
                 const cashDropAmount = parseFloat(item.system_drop_amount || 0);
                 const reconcileDelta = countedAmount - cashDropAmount;
+                const hasDelta = Math.abs(reconcileDelta) > 0.01;
                 
                 // Safely parse reconcile_delta from item
                 const itemReconcileDelta = item.reconcile_delta != null ? parseFloat(item.reconcile_delta) : 0;
@@ -409,21 +444,62 @@ function CashDropValidation() {
                           </div>
                         ) : (
                           <div className="flex flex-col gap-2">
-                            {/* Notes field - shown when "Reconcile with Delta" is clicked */}
+                            {/* Notes + denomination editor when "Reconcile with Delta" is clicked */}
                             {showNotesField[item.id] && (
-                              <div className="p-2 bg-gray-50 rounded border border-gray-200">
-                                <label className="block text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                  Notes (Required for Delta Reconciliation):
-                                </label>
-                                <textarea
-                                  value={reconciliationNotes[item.id] || ''}
-                                  onChange={(e) => setReconciliationNotes({...reconciliationNotes, [item.id]: e.target.value})}
-                                  rows="3"
-                                  className="w-full p-2 border rounded-lg resize-none focus:ring-2 focus:ring-pink-500 outline-none"
-                                  placeholder="Explain the difference between counted amount and drop amount..."
-                                  style={{ fontSize: '14px' }}
-                                />
-                              </div>
+                              <>
+                                <div className="p-2 bg-amber-50 rounded border border-amber-200">
+                                  <p className="text-xs font-bold uppercase mb-2" style={{ color: COLORS.magenta, fontSize: '14px' }}>
+                                    Cash drop amount does not match counted amount. Customize the denominations below to match what you counted; they must total the counted amount. Then add notes and submit.
+                                  </p>
+                                </div>
+                                {hasDelta && customDenominations[item.id] && (
+                                  <div className="p-2 bg-gray-50 rounded border border-gray-200">
+                                    <label className="block text-xs font-bold uppercase mb-2" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                      Customize denominations (must total ${countedAmount.toFixed(2)}):
+                                    </label>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
+                                      {DENOMINATION_CONFIG.map(denom => (
+                                        <div key={denom.name} className="flex items-center gap-1">
+                                          <span className="text-xs flex-shrink-0 w-20 truncate" style={{ color: COLORS.gray, fontSize: '12px' }}>{denom.display}</span>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            className="w-16 p-1 border rounded text-right font-bold"
+                                            style={{ fontSize: '14px' }}
+                                            value={customDenominations[item.id][denom.name] ?? ''}
+                                            onChange={(e) => setCustomDenominations(prev => ({
+                                              ...prev,
+                                              [item.id]: { ...prev[item.id], [denom.name]: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 }
+                                            }))}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <p className="text-xs font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                      Total: ${getCustomDenomSum(item.id).toFixed(2)}
+                                      {Math.abs(getCustomDenomSum(item.id) - countedAmount) <= 0.02 ? (
+                                        <span className="text-green-600 ml-2">✓ Matches counted amount</span>
+                                      ) : (
+                                        <span className="text-red-600 ml-2">Must equal ${countedAmount.toFixed(2)}</span>
+                                      )}
+                                    </p>
+                                  </div>
+                                )}
+                                <div className="p-2 bg-gray-50 rounded border border-gray-200">
+                                  <label className="block text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                    Notes (Required for Delta Reconciliation):
+                                  </label>
+                                  <textarea
+                                    value={reconciliationNotes[item.id] || ''}
+                                    onChange={(e) => setReconciliationNotes({...reconciliationNotes, [item.id]: e.target.value})}
+                                    rows="3"
+                                    className="w-full p-2 border rounded-lg resize-none focus:ring-2 focus:ring-pink-500 outline-none"
+                                    placeholder="Explain the difference between counted amount and drop amount..."
+                                    style={{ fontSize: '14px' }}
+                                  />
+                                </div>
+                              </>
                             )}
                             
                             {/* Two reconcile buttons */}

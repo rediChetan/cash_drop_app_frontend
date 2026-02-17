@@ -152,6 +152,31 @@ export const formatPSTDateTime = (dateStr, timeStr, options = {}) => {
 };
 
 /**
+ * Get yesterday's date in PST (YYYY-MM-DD)
+ */
+export const getPSTYesterday = () => {
+  const today = getPSTDate();
+  const [y, m, d] = today.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() - 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * Return true if dateStr (YYYY-MM-DD) is the current day or the previous day in PST.
+ * Used to restrict cash drop submit/save to only today or yesterday.
+ */
+export const isAllowedCashDropDate = (dateStr) => {
+  if (!dateStr) return false;
+  const today = getPSTDate();
+  const yesterday = getPSTYesterday();
+  return dateStr === today || dateStr === yesterday;
+};
+
+/**
  * Get start of week (Monday) in PST
  */
 export const getPSTWeekStart = () => {

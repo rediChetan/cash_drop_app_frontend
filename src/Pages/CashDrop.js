@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_ENDPOINTS } from '../config/api';
-import { getPSTDate } from '../utils/dateUtils';
+import { getPSTDate, isAllowedCashDropDate } from '../utils/dateUtils';
 
 function CashDrop() {
   const navigate = useNavigate();
@@ -15,7 +15,7 @@ function CashDrop() {
   // Color constants
   const COLORS = {
     magenta: '#AA056C',
-    yellowGreen: '#C4CB07',
+    yellowGreen: '#22C55E',
     lightPink: '#F46690',
     gray: '#64748B'
   };
@@ -339,6 +339,10 @@ function CashDrop() {
   };
 
   const handleSaveDraft = async () => {
+    if (!isAllowedCashDropDate(formData.date)) {
+      showStatusMessage('Drafts can only be saved for the current day or the previous day (PST).', 'error');
+      return;
+    }
     const token = sessionStorage.getItem('access_token');
     setIsSubmitting(true);
     try {
@@ -502,6 +506,10 @@ function CashDrop() {
   };
 
   const handleSubmit = async () => {
+    if (!isAllowedCashDropDate(formData.date)) {
+      showStatusMessage('Cash drop can only be submitted for the current day or the previous day (PST).', 'error');
+      return;
+    }
     const token = sessionStorage.getItem('access_token');
     setIsSubmitting(true);
     try {

@@ -5,7 +5,7 @@ import { API_ENDPOINTS } from "../config/api";
 // Color constants
 const COLORS = {
   magenta: '#AA056C',
-  yellowGreen: '#C4CB07',
+  yellowGreen: '#22C55E',
   lightPink: '#F46690',
   gray: '#64748B'
 };
@@ -52,11 +52,11 @@ function LoginPage() {
 
     return (
         <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Calibri, Verdana, sans-serif' }}>
-            <section className="flex flex-col items-center justify-center px-6 py-8 mx-auto md:h-screen lg:py-0">
-                <Link to="/" className="flex items-center mb-6" style={{ fontSize: '18px' }}>
-                    <img className="mr-2 w-8 h-8" src="https://cdn.shortpixel.ai/spai2/q_lossless+w_257+to_webp+ret_img/assets.simpleviewinc.com/simpleview/image/upload/crm/santamonica/menchies-logo_ECB7D9CC-C8AC-F5BB-F5AFDAC11380689A-ecb7d95606c6631_ecb7dbfb-cc16-c67e-d50f0c45af37ba21.png" alt="Menchies Logo" />
-                    <span className="font-bold" style={{ color: COLORS.magenta, fontSize: '18px' }}>Menchies Escondido</span>
-                </Link>
+            <section className="flex flex-col items-center justify-center mx-auto md:h-screen lg:py-0">
+                <img className="w-60 h-60" src="https://cdn.shortpixel.ai/spai2/q_lossless+w_257+to_webp+ret_img/assets.simpleviewinc.com/simpleview/image/upload/crm/santamonica/menchies-logo_ECB7D9CC-C8AC-F5BB-F5AFDAC11380689A-ecb7d95606c6631_ecb7dbfb-cc16-c67e-d50f0c45af37ba21.png" alt="Menchies Logo" />   
+                <h1 className="font-bold leading-tight tracking-tight" style={{ fontSize: '18px', color: COLORS.gray }}>
+                    Menchies Escondido
+                </h1>
                 <div className="w-full bg-white rounded-lg shadow border md:mt-0 sm:max-w-md xl:p-0">
                     <div className="p-6 space-y-4 md:space-y-6 sm:p-8">
                         <h1 className="font-bold leading-tight tracking-tight" style={{ fontSize: '18px', color: COLORS.gray }}>
