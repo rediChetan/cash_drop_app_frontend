@@ -287,8 +287,8 @@ function CashDrop() {
       today.setHours(0, 0, 0, 0);
       selectedDate.setHours(0, 0, 0, 0);
       
-      if (selectedDate < today) {
-        showStatusMessage('Cannot select prior dates. Cash drop is for immediate shift/day closure.', 'error');
+      if (selectedDate < (today -  1 * 24 * 60 * 60 * 1000)) {
+        showStatusMessage('Cannot select prior days which are over 24 hrs old. Cash drop is for immediate shift/day closure.', 'error');
         return;
       }
     }
@@ -719,7 +719,7 @@ function CashDrop() {
             </div>
             <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Date</label>
-                <input type="date" name="date" value={formData.date} onChange={handleChange} max={getPSTDate()} className="p-2 bg-white border-b border-gray-300 font-bold focus:border-pink-600 outline-none" style={{ fontSize: '14px', color: COLORS.gray }} />
+                <input type="date" name="date" value={formData.date} onChange={handleChange} min={getPSTDate()-2*24*60*60*1000} max={getPSTDate()} className="p-2 bg-white border-b border-gray-300 font-bold focus:border-pink-600 outline-none" style={{ fontSize: '14px', color: COLORS.gray }} />
             </div>
             <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Starting Cash</label>

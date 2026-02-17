@@ -135,7 +135,12 @@ function CdDashboard() {
     fetchData(start, end);
   };
 
-  const uniqueDates = [...new Set([...cashDrops.map(d => d.date), ...cashDrawers.map(d => d.date)])].sort().reverse();
+  // Normalize date to YYYY-MM-DD for consistent comparison (backend may return date or datetime)
+  const normalizeDate = (d) => (d && typeof d === 'string' ? d.replace(/T.*$/, '').trim() : d);
+  const uniqueDates = [...new Set([
+    ...cashDrops.map(d => normalizeDate(d.date)),
+    ...cashDrawers.map(d => normalizeDate(d.date))
+  ].filter(Boolean))].sort().reverse();
 
   // Filter cash drops by status (for display)
   const dropsPassStatusFilter = (drop) => {
@@ -143,20 +148,21 @@ function CdDashboard() {
     return drop.status === statusFilter;
   };
 
-  // Build rows for activeDate: pair each drop with its drawer via drawer_entry_id (FK), then add standalone drawers
+  // Build rows for activeDate: pair each drop with its drawer via drawer_entry_id; use drop's date for row placement so drop+drawer stay in sync
   const getRowsForActiveDate = () => {
     if (!activeDate) return [];
-    const dropsForDate = cashDrops.filter(d => d.date === activeDate).filter(dropsPassStatusFilter);
-    const drawersForDate = cashDrawers.filter(d => d.date === activeDate);
-    const drawerById = Object.fromEntries(drawersForDate.map(d => [d.id, d]));
+    const normActive = normalizeDate(activeDate);
+    const dropsForDate = cashDrops.filter(d => normalizeDate(d.date) === normActive).filter(dropsPassStatusFilter);
+    const drawersForDate = cashDrawers.filter(d => normalizeDate(d.date) === normActive);
+    const drawerByIdAll = Object.fromEntries(cashDrawers.map(d => [d.id, d]));
 
     const rows = dropsForDate.map(drop => ({
       drop,
-      drawer: drop.drawer_entry_id ? drawerById[drop.drawer_entry_id] || null : null
+      drawer: drop.drawer_entry_id ? drawerByIdAll[drop.drawer_entry_id] || null : null
     }));
 
-    const linkedDrawerIds = new Set(dropsForDate.map(d => d.drawer_entry_id).filter(Boolean));
-    const standaloneDrawers = drawersForDate.filter(d => !linkedDrawerIds.has(d.id));
+    const allLinkedDrawerIds = new Set(cashDrops.map(d => d.drawer_entry_id).filter(Boolean));
+    const standaloneDrawers = drawersForDate.filter(d => !allLinkedDrawerIds.has(d.id));
     standaloneDrawers.forEach(drawer => rows.push({ drop: null, drawer }));
 
     return rows;
