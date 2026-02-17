@@ -49,6 +49,8 @@ const BankDrop = () => {
   const [droppingSingleId, setDroppingSingleId] = useState(null); // loading state for single-row drop
   const [batchHistory, setBatchHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [batchViewData, setBatchViewData] = useState([]);
+  const [loadingBatchView, setLoadingBatchView] = useState(false);
 
   const showStatusMessage = (text, type = 'info') => {
     setStatusMessage({ show: true, text, type });
@@ -231,7 +233,7 @@ const BankDrop = () => {
 
   const handleSelectAll = (checked) => {
     if (checked) {
-      const source = batchFilter === 'all' || batchFilter === 'pending' ? filteredData : filteredData;
+      const source = hasBatchSelection ? batchViewData : filteredData;
       const nonBankDroppedIds = new Set(
         source.filter(item => !item.bank_dropped).map(item => item.drop_entry_id)
       );
@@ -379,10 +381,10 @@ const BankDrop = () => {
 
   const hasBatchSelection = selectedBatchNumbers.size > 0;
   const filteredData = (() => {
-    if (hasBatchSelection) return data.filter(item => selectedBatchNumbers.has(item.bank_drop_batch_number));
     if (batchFilter === 'pending') return data.filter(item => !item.bank_dropped);
     return data;
   })();
+  const listData = hasBatchSelection ? batchViewData : filteredData;
 
   useEffect(() => {
     if (selectedBatchNumbers.size > 0 && batchHistory.length > 0) {
@@ -395,6 +397,39 @@ const BankDrop = () => {
       });
     }
   }, [batchHistory]);
+
+  useEffect(() => {
+    if (selectedBatchNumbers.size === 0) {
+      setBatchViewData([]);
+      return;
+    }
+    const fetchBatchView = async () => {
+      setLoadingBatchView(true);
+      const token = sessionStorage.getItem('access_token');
+      try {
+        const response = await fetch(API_ENDPOINTS.BANK_DROP_BY_BATCHES, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ batch_numbers: Array.from(selectedBatchNumbers) })
+        });
+        if (response.ok) {
+          const list = await response.json();
+          setBatchViewData(Array.isArray(list) ? list : []);
+        } else {
+          setBatchViewData([]);
+        }
+      } catch (err) {
+        console.error('Fetch batch view error:', err);
+        setBatchViewData([]);
+      } finally {
+        setLoadingBatchView(false);
+      }
+    };
+    fetchBatchView();
+  }, [selectedBatchNumbers]);
 
   const selectedPendingCount = getSelectedPendingIds().length;
   const canGetSummary = hasBatchSelection || selectedPendingCount > 0;
@@ -571,8 +606,8 @@ const BankDrop = () => {
                 <label className="flex items-center gap-2 font-bold" style={{ fontSize: '14px' }}>
                   <input
                     type="checkbox"
-                    checked={filteredData.filter(item => !item.bank_dropped).length > 0 &&
-                      filteredData.filter(item => !item.bank_dropped).every(item => selectedIds.has(item.drop_entry_id))}
+                    checked={listData.filter(item => !item.bank_dropped).length > 0 &&
+                      listData.filter(item => !item.bank_dropped).every(item => selectedIds.has(item.drop_entry_id))}
                     onChange={(e) => handleSelectAll(e.target.checked)}
                     className="w-4 h-4"
                   />
@@ -615,8 +650,8 @@ const BankDrop = () => {
                   {!hasBatchSelection && (
                     <input
                       type="checkbox"
-                      checked={filteredData.filter(item => !item.bank_dropped).length > 0 &&
-                        filteredData.filter(item => !item.bank_dropped).every(item => selectedIds.has(item.drop_entry_id))}
+                      checked={listData.filter(item => !item.bank_dropped).length > 0 &&
+                        listData.filter(item => !item.bank_dropped).every(item => selectedIds.has(item.drop_entry_id))}
                       onChange={(e) => handleSelectAll(e.target.checked)}
                       className="w-4 h-4"
                     />
@@ -630,7 +665,13 @@ const BankDrop = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredData.length > 0 ? filteredData.map(item => (
+              {hasBatchSelection && loadingBatchView ? (
+                <tr>
+                  <td colSpan="7" className="p-20 text-center italic font-bold uppercase tracking-widest" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                    Loading batch items...
+                  </td>
+                </tr>
+              ) : listData.length > 0 ? listData.map(item => (
                 <tr key={item.id} className="border-b hover:bg-pink-50/30 transition-colors">
                   <td className="p-2 md:p-4">
                     {!hasBatchSelection && (

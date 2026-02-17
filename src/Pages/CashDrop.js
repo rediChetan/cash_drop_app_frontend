@@ -287,8 +287,8 @@ function CashDrop() {
       today.setHours(0, 0, 0, 0);
       selectedDate.setHours(0, 0, 0, 0);
       
-      if (selectedDate < (today -  1 * 24 * 60 * 60 * 1000)) {
-        showStatusMessage('Cannot select prior days which are over 24 hrs old. Cash drop is for immediate shift/day closure.', 'error');
+      if (selectedDate < (today -  3 * 24 * 60 * 60 * 1000)) {
+        showStatusMessage('Cannot select prior days which are over 72 hrs old. Cash drop is for immediate shift/day closure.', 'error');
         return;
       }
     }
