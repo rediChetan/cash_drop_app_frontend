@@ -27,7 +27,7 @@ function CashDrop() {
     workStation: '',
     date: getPSTDate(),
     startingCash: '200.00',
-    cashReceivedOnReceipt: 0,
+    cashReceivedOnReceipt: '',
     pennies: 0, nickels: 0, dimes: 0, quarters: 0, halfDollars: 0,
     ones: 0, twos: 0, fives: 0, tens: 0, twenties: 0, fifties: 0, hundreds: 0,
     notes: ''
@@ -733,12 +733,16 @@ function CashDrop() {
             <div className="bg-white border rounded-lg p-4 md:p-6">
               <h3 className="font-black uppercase mb-4 md:mb-6 tracking-widest border-b pb-2" style={{ fontSize: '18px', color: COLORS.gray }}>1. Register Cash Count</h3>
               <div className="space-y-3">
-                {DENOMINATION_CONFIG.map(d => (
-                  <div key={d.field} className="flex justify-between items-center">
-                    <span className="text-xs font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>{d.display}</span>
-                    <input type="text" name={d.field} value={formData[d.field]} onChange={handleChange} className="w-20 p-1 border rounded text-right" style={{ fontSize: '14px' }} />
-                  </div>
-                ))}
+                {DENOMINATION_CONFIG.map(d => {
+                  const val = formData[d.field];
+                  const isZero = val == null || Number(val) === 0;
+                  return (
+                    <div key={d.field} className="flex justify-between items-center">
+                      <span className="text-xs font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>{d.display}</span>
+                      <input type="text" name={d.field} value={isZero ? '' : String(val)} onChange={handleChange} className="w-20 p-1 border rounded text-right" style={{ fontSize: '14px' }} />
+                    </div>
+                  );
+                })}
               </div>
               <div className="mt-6 md:mt-8 pt-4 border-t space-y-2">
                 <div className="flex justify-between" style={{ fontSize: '14px' }}><span>Drawer Total:</span> <span className="font-bold">${calculateTotalCash()}</span></div>

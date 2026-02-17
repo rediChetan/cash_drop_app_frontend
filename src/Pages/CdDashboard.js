@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS } from '../config/api';
-import { getPSTDate, getPSTWeekStart, getPSTMonthStart, getPSTYearStart, formatPSTDateTime, formatPSTDate } from '../utils/dateUtils';
+import { getPSTDate, getPSTWeekStart, getPSTMonthStart, getPSTYearStart, formatPSTDate, formatPSTDateWithTime } from '../utils/dateUtils';
 
 function CdDashboard() {
   const navigate = useNavigate();
@@ -170,8 +170,9 @@ function CdDashboard() {
 
   const rowsForActiveDate = getRowsForActiveDate();
 
-  const formatDateTime = (dateStr, submittedAt) => {
-    return formatPSTDateTime(dateStr, submittedAt);
+  // Use selected/finalization date (drop.date / drawer.date) for the date part; time from timestamp in PST
+  const formatSubmittedOrSaved = (selectedDateStr, timestampStr) => {
+    return formatPSTDateWithTime(selectedDateStr, timestampStr);
   };
 
   const showStatusMessage = (text, type = 'info') => {
@@ -338,7 +339,7 @@ function CdDashboard() {
                     fontSize: '14px'
                   }}
                 >
-                  {formatPSTDateTime(date, null, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {formatPSTDate(date, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </button>
               ))}
             </div>
@@ -411,12 +412,12 @@ function CdDashboard() {
                               </div>
                               {drop.status === 'drafted' && drop.created_at && (
                                 <div className="text-xs mb-3 md:mb-4 italic" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                  Saved: {formatDateTime(null, drop.created_at)}
+                                  Saved: {formatSubmittedOrSaved(drop.date, drop.created_at)}
                                 </div>
                               )}
                               {drop.submitted_at && (
                                 <div className="text-xs mb-3 md:mb-4 italic" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                  Submitted: {formatDateTime(drop.date, drop.submitted_at)} (PST)
+                                  Submitted: {formatSubmittedOrSaved(drop.date, drop.submitted_at)}
                                 </div>
                               )}
                               {drop.variance !== undefined && drop.variance !== null && (
@@ -516,7 +517,7 @@ function CdDashboard() {
                               </div>
                               {(!drop && drawer.status === 'drafted' && drawer.created_at) && (
                                 <div className="text-xs mb-3 md:mb-4 italic" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                  Saved: {formatDateTime(null, drawer.created_at)}
+                                  Saved: {formatSubmittedOrSaved(drawer.date, drawer.created_at)}
                                 </div>
                               )}
                               {((drop && drop.status === 'drafted') || (!drop && drawer.status === 'drafted')) && (

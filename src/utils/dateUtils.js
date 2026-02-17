@@ -80,75 +80,106 @@ export const formatPSTDate = (dateStr, options = {}) => {
 };
 
 /**
- * Format datetime string - displays as-is from database
- * Only formats for display, doesn't convert timezone
- * Accepts dateStr (YYYY-MM-DD) and timeStr (HH:mm:ss or full datetime string)
+ * Parse a datetime string as UTC (GMT) and return a Date object.
+ * Handles: "YYYY-MM-DD HH:mm:ss", "YYYY-MM-DDTHH:mm:ss", "YYYY-MM-DDTHH:mm:ss.000Z", or date + time parts.
+ */
+function parseAsUTC(dateStr, timeStr) {
+  let iso = null;
+  if (timeStr && (timeStr.includes('T') || timeStr.includes('Z'))) {
+    iso = timeStr.includes('Z') ? timeStr : timeStr.replace(' ', 'T').replace(/(\d{2}:\d{2}:\d{2})(\.\d+)?/, '$1') + 'Z';
+  } else if (dateStr && timeStr) {
+    const datePart = dateStr.replace(/T.*$/, '');
+    const timePart = (timeStr.includes(' ') ? timeStr.split(' ')[1] : timeStr).replace(/\.\d+Z?$/, '');
+    iso = `${datePart}T${timePart}Z`;
+  } else if (dateStr) {
+    iso = dateStr.replace(/T.*$/, '') + 'T00:00:00Z';
+  }
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Format datetime string for display in PST.
+ * Backend datetimes are treated as GMT/UTC; they are converted to PST for display (PST = GMT - 8).
  */
 export const formatPSTDateTime = (dateStr, timeStr, options = {}) => {
-  // If dateStr is empty but timeStr contains a full datetime, extract date from timeStr
+  if (!dateStr && !timeStr) return '';
   if (!dateStr && timeStr) {
     if (timeStr.includes(' ')) {
       const parts = timeStr.split(' ');
-      dateStr = parts[0]; // Extract date part
-      timeStr = parts[1]; // Keep time part
+      dateStr = parts[0];
+      timeStr = parts[1] || timeStr;
     } else if (timeStr.includes('T')) {
-      const parts = timeStr.split('T');
-      dateStr = parts[0]; // Extract date part
-      timeStr = parts[1] ? parts[1].split('.')[0] : null; // Extract time, remove milliseconds
+      dateStr = timeStr.split('T')[0];
     }
   }
-  
   if (!dateStr) return '';
-  
+
   try {
-    // If timeStr is a full datetime string (YYYY-MM-DD HH:mm:ss), extract time part
-    let timePart = null;
-    if (timeStr) {
-      if (timeStr.includes(' ')) {
-        // Full datetime string - extract time part
-        const parts = timeStr.split(' ');
-        if (parts.length >= 2) {
-          timePart = parts[1]; // Get HH:mm:ss part
-        } else {
-          timePart = timeStr;
-        }
-      } else if (timeStr.includes('T')) {
-        // ISO format datetime - extract time part
-        const parts = timeStr.split('T');
-        if (parts.length >= 2) {
-          timePart = parts[1].split('.')[0]; // Get HH:mm:ss, remove milliseconds
-        }
-      } else {
-        timePart = timeStr; // Assume it's already just time
-      }
+    const date = parseAsUTC(dateStr, timeStr);
+    if (!date) {
+      return formatPSTDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' }) + (timeStr ? ` at ${timeStr}` : '');
     }
-    
-    let formatted = formatPSTDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
-    if (timePart) {
-      // Parse time string (HH:mm:ss or HH:mm format)
-      const timeParts = timePart.split(':');
-      if (timeParts.length >= 2) {
-        const hours = parseInt(timeParts[0]) || 0;
-        const minutes = parseInt(timeParts[1]) || 0;
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
-        formatted += ` at ${displayHours}:${String(minutes).padStart(2, '0')} ${ampm}`;
-      } else {
-        formatted += ` at ${timePart}`;
-      }
-    }
-    return formatted;
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+    const parts = formatter.formatToParts(date);
+    const month = parts.find(p => p.type === 'month').value;
+    const day = parts.find(p => p.type === 'day').value;
+    const year = parts.find(p => p.type === 'year').value;
+    const hour = parts.find(p => p.type === 'hour').value;
+    const minute = parts.find(p => p.type === 'minute').value;
+    const dayPeriod = parts.find(p => p.type === 'dayPeriod').value;
+    return `${month} ${day}, ${year} at ${hour}:${minute} ${dayPeriod}`;
   } catch (e) {
-    // If formatting fails, return simple date string
     if (timeStr) {
-      // Try to format as simple string
-      if (timeStr.includes(' ')) {
-        return `${dateStr} at ${timeStr.split(' ')[1]}`;
-      }
+      if (timeStr.includes(' ')) return `${dateStr} at ${timeStr.split(' ')[1]}`;
       return `${dateStr} at ${timeStr}`;
     }
     return dateStr;
   }
+};
+
+/**
+ * Format a datetime string as time only in PST (e.g. "10:30 AM").
+ * Input is treated as GMT/UTC.
+ */
+export const formatTimePST = (datetimeStr) => {
+  if (!datetimeStr) return '';
+  let date = null;
+  if (datetimeStr.includes(' ') || datetimeStr.includes('T')) {
+    const d = datetimeStr.includes('T') ? datetimeStr.split('T')[0] : datetimeStr.split(' ')[0];
+    const t = datetimeStr.includes('T') ? datetimeStr.split('T')[1] : datetimeStr.split(' ')[1];
+    date = parseAsUTC(d, t || datetimeStr);
+  } else {
+    date = parseAsUTC(null, datetimeStr);
+  }
+  if (!date || isNaN(date.getTime())) return '';
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+  return formatter.format(date);
+};
+
+/**
+ * Format for display using the selected/finalization date (not from timestamp).
+ * Use this so the date shown is always the one selected at cash drop submission, with time from the timestamp in PST.
+ */
+export const formatPSTDateWithTime = (selectedDateStr, timestampStr, options = {}) => {
+  if (!selectedDateStr) return timestampStr ? formatTimePST(timestampStr) : '';
+  const datePart = formatPSTDate(selectedDateStr, { month: 'short', day: 'numeric', year: 'numeric' });
+  if (!timestampStr) return datePart;
+  return `${datePart} at ${formatTimePST(timestampStr)}`;
 };
 
 /**

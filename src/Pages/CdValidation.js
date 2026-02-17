@@ -453,30 +453,36 @@ function CashDropValidation() {
                                   </p>
                                 </div>
                                 {hasDelta && customDenominations[item.id] && (
-                                  <div className="p-2 bg-gray-50 rounded border border-gray-200">
-                                    <label className="block text-xs font-bold uppercase mb-2" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                  <div className="bg-white border rounded-lg p-4">
+                                    <h4 className="font-black uppercase mb-3 tracking-widest border-b pb-2" style={{ fontSize: '18px', color: COLORS.gray }}>
                                       Customize denominations (must total ${countedAmount.toFixed(2)}):
-                                    </label>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
-                                      {DENOMINATION_CONFIG.map(denom => (
-                                        <div key={denom.name} className="flex items-center gap-1">
-                                          <span className="text-xs flex-shrink-0 w-20 truncate" style={{ color: COLORS.gray, fontSize: '12px' }}>{denom.display}</span>
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            step="1"
-                                            className="w-16 p-1 border rounded text-right font-bold"
-                                            style={{ fontSize: '14px' }}
-                                            value={customDenominations[item.id][denom.name] ?? ''}
-                                            onChange={(e) => setCustomDenominations(prev => ({
-                                              ...prev,
-                                              [item.id]: { ...prev[item.id], [denom.name]: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 }
-                                            }))}
-                                          />
-                                        </div>
-                                      ))}
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-2 mb-2">
+                                      {DENOMINATION_CONFIG.map(denom => {
+                                        const val = customDenominations[item.id][denom.name];
+                                        const isZero = val == null || Number(val) === 0;
+                                        return (
+                                          <div key={denom.name} className="flex justify-between text-xs bg-gray-50 p-2 rounded border">
+                                            <span style={{ color: COLORS.gray, fontSize: '14px' }}>{denom.display}</span>
+                                            <input
+                                              type="text"
+                                              inputMode="numeric"
+                                              className="w-16 p-1 border rounded text-right font-bold bg-white"
+                                              style={{ fontSize: '14px' }}
+                                              value={isZero ? '' : String(val)}
+                                              onChange={(e) => {
+                                                const v = e.target.value.trim();
+                                                setCustomDenominations(prev => ({
+                                                  ...prev,
+                                                  [item.id]: { ...prev[item.id], [denom.name]: v === '' ? 0 : (parseFloat(v) || 0) }
+                                                }));
+                                              }}
+                                            />
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                    <p className="text-xs font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                    <p className="text-xs font-bold mt-2" style={{ color: COLORS.gray, fontSize: '14px' }}>
                                       Total: ${getCustomDenomSum(item.id).toFixed(2)}
                                       {Math.abs(getCustomDenomSum(item.id) - countedAmount) <= 0.02 ? (
                                         <span className="text-green-600 ml-2">✓ Matches counted amount</span>

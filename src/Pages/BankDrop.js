@@ -510,7 +510,7 @@ const BankDrop = () => {
                 />
               </div>
               <button 
-                onClick={fetchData} 
+                onClick={() => fetchData(dateFrom, dateTo)} 
                 className="text-white px-4 py-2 rounded font-bold transition h-[38px]"
                 style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
               >
@@ -627,7 +627,6 @@ const BankDrop = () => {
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Reconciled Amount</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Cash Drop Receipt Amount</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Reconcile Delta</th>
-                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Bank Dropped</th>
               </tr>
             </thead>
             <tbody>
@@ -677,23 +676,6 @@ const BankDrop = () => {
                   <td className={`p-2 md:p-4 font-black ${parseFloat(item.reconcile_delta) !== 0 ? 'text-red-500' : 'text-gray-300'}`} style={{ fontSize: '14px' }}>
                     ${item.reconcile_delta}
                   </td>
-                  <td className="p-2 md:p-4">
-                    {item.bank_dropped ? (
-                      <span className="font-bold inline-block px-2 py-1 rounded" style={{ fontSize: '14px', backgroundColor: COLORS.yellowGreen + '30', color: COLORS.gray }}>
-                        Dropped {item.bank_drop_batch_number ? `· ${item.bank_drop_batch_number}` : ''}
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => openDropModal('single', { item })}
-                        disabled={droppingSingleId === item.drop_entry_id}
-                        className="px-3 py-1.5 rounded font-bold text-white transition disabled:opacity-50"
-                        style={{ fontSize: '14px', backgroundColor: COLORS.magenta }}
-                      >
-                        {droppingSingleId === item.drop_entry_id ? 'Dropping...' : 'Drop'}
-                      </button>
-                    )}
-                  </td>
                 </tr>
               )) : (
                 <tr>
@@ -708,7 +690,7 @@ const BankDrop = () => {
         </div>
 
         {/* RIGHT: History - select batches to see them in the list */}
-        <div className="lg:w-[360px] flex-shrink-0 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden flex flex-col">
+        <div className="lg:w-[520px] flex-shrink-0 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-gray-100 bg-gray-50/80 flex flex-row justify-between items-start gap-3">
             <div className="min-w-0">
               <h3 className="font-black uppercase italic tracking-tighter" style={{ fontSize: '18px', color: COLORS.gray }}>History</h3>
