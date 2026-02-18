@@ -61,5 +61,5 @@ media/
 .git/
 
 #Allow public Icons
-public/icon-192x192.png
-public/icon-512x512.png
+!.public/icon-192x192.png
+!.public/icon-512x512.png
