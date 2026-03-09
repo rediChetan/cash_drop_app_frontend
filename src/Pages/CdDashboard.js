@@ -54,13 +54,17 @@ function CdDashboard() {
     { name: 'twenties', value: 20, display: 'Twenties ($20)' },
     { name: 'tens', value: 10, display: 'Tens ($10)' },
     { name: 'fives', value: 5, display: 'Fives ($5)' },
-    { name: 'twos', value: 2, display: 'Twos ($2)' },
     { name: 'ones', value: 1, display: 'Ones ($1)' },
-    { name: 'half_dollars', value: 0.50, display: 'Half Dollars ($0.50)' },
     { name: 'quarters', value: 0.25, display: 'Quarters ($0.25)' },
     { name: 'dimes', value: 0.10, display: 'Dimes ($0.10)' },
     { name: 'nickels', value: 0.05, display: 'Nickels ($0.05)' },
     { name: 'pennies', value: 0.01, display: 'Pennies ($0.01)' },
+  ];
+  const ROLLS_DISPLAY = [
+    { name: 'quarter_rolls', value: 10, display: 'Quarter Rolls ($10)' },
+    { name: 'dime_rolls', value: 5, display: 'Dime Rolls ($5)' },
+    { name: 'nickel_rolls', value: 2, display: 'Nickel Rolls ($2)' },
+    { name: 'penny_rolls', value: 0.50, display: 'Penny Rolls ($0.50)' },
   ];
 
   useEffect(() => {
@@ -505,6 +509,15 @@ function CdDashboard() {
                                     </div>
                                   );
                                 })}
+                                {ROLLS_DISPLAY.map(denom => {
+                                  const value = drop[denom.name] || 0;
+                                  return (
+                                    <div key={denom.name} className="flex justify-between text-xs bg-white p-1.5 px-2 rounded border border-gray-100">
+                                      <span style={{ color: COLORS.gray, fontSize: '14px' }}>{denom.display}</span>
+                                      <span className="font-bold" style={{ fontSize: '14px' }}>{value}</span>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           ) : <div className="h-full bg-gray-50/30 rounded-lg border border-dashed border-gray-200"></div>}
@@ -577,6 +590,15 @@ function CdDashboard() {
                               )}
                               <div className="grid grid-cols-2 gap-2 mt-auto pt-4 border-t border-gray-200">
                                 {DENOMINATION_CONFIG.map(denom => {
+                                  const value = drawer[denom.name] || 0;
+                                  return (
+                                    <div key={denom.name} className="flex justify-between text-xs bg-white p-1.5 px-2 rounded border border-gray-100">
+                                      <span style={{ color: COLORS.gray, fontSize: '14px' }}>{denom.display}</span>
+                                      <span className="font-bold" style={{ fontSize: '14px' }}>{value}</span>
+                                    </div>
+                                  );
+                                })}
+                                {ROLLS_DISPLAY.map(denom => {
                                   const value = drawer[denom.name] || 0;
                                   return (
                                     <div key={denom.name} className="flex justify-between text-xs bg-white p-1.5 px-2 rounded border border-gray-100">

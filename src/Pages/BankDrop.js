@@ -8,13 +8,17 @@ const DENOMINATION_CONFIG = [
   { name: 'Twenties', value: 20, field: 'twenties', display: 'Twenties ($20)' },
   { name: 'Tens', value: 10, field: 'tens', display: 'Tens ($10)' },
   { name: 'Fives', value: 5, field: 'fives', display: 'Fives ($5)' },
-  { name: 'Twos', value: 2, field: 'twos', display: 'Twos ($2)' },
   { name: 'Ones', value: 1, field: 'ones', display: 'Ones ($1)' },
-  { name: 'Half Dollars', value: 0.50, field: 'half_dollars', display: 'Half Dollars ($0.50)' },
   { name: 'Quarters', value: 0.25, field: 'quarters', display: 'Quarters ($0.25)' },
   { name: 'Dimes', value: 0.10, field: 'dimes', display: 'Dimes ($0.10)' },
   { name: 'Nickels', value: 0.05, field: 'nickels', display: 'Nickels ($0.05)' },
   { name: 'Pennies', value: 0.01, field: 'pennies', display: 'Pennies ($0.01)' },
+];
+const ROLLS_CONFIG = [
+  { name: 'Quarter Rolls', value: 10, field: 'quarter_rolls', display: 'Quarter Rolls ($10)' },
+  { name: 'Dime Rolls', value: 5, field: 'dime_rolls', display: 'Dime Rolls ($5)' },
+  { name: 'Nickel Rolls', value: 2, field: 'nickel_rolls', display: 'Nickel Rolls ($2)' },
+  { name: 'Penny Rolls', value: 0.50, field: 'penny_rolls', display: 'Penny Rolls ($0.50)' },
 ];
 
 const BankDrop = () => {
@@ -377,9 +381,9 @@ const BankDrop = () => {
   };
 
   const calculateTotal = (denominations) => {
-    return DENOMINATION_CONFIG.reduce((total, denom) => {
-      return total + (denominations[denom.field] || 0) * denom.value;
-    }, 0);
+    const denomTotal = DENOMINATION_CONFIG.reduce((total, denom) => total + (denominations[denom.field] || 0) * denom.value, 0);
+    const rollsTotal = ROLLS_CONFIG.reduce((total, r) => total + (denominations[r.field] || 0) * r.value, 0);
+    return denomTotal + rollsTotal;
   };
 
   const hasBatchSelection = selectedBatchNumbers.size > 0;
@@ -884,6 +888,15 @@ const BankDrop = () => {
                                       </div>
                                     );
                                   })}
+                                  {ROLLS_CONFIG.map(r => {
+                                    const count = batchDenomCache[row.batch_number].totals[r.field] || 0;
+                                    return (
+                                      <div key={r.field} className="flex justify-between text-xs bg-gray-50 p-2 rounded border">
+                                        <span style={{ color: COLORS.gray, fontSize: '13px' }}>{r.display}</span>
+                                        <span className="font-bold" style={{ fontSize: '13px' }}>{count}</span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                                 <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
                                   <span className="font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>Total:</span>
@@ -935,6 +948,15 @@ const BankDrop = () => {
                   return (
                     <div key={denom.field} className="flex justify-between text-xs bg-white p-1.5 px-2 rounded border border-gray-100">
                       <span style={{ color: COLORS.gray, fontSize: '14px' }}>{denom.display}</span>
+                      <span className="font-bold" style={{ fontSize: '14px' }}>{count}</span>
+                    </div>
+                  );
+                })}
+                {ROLLS_CONFIG.map(r => {
+                  const count = summaryData.totals[r.field] || 0;
+                  return (
+                    <div key={r.field} className="flex justify-between text-xs bg-white p-1.5 px-2 rounded border border-gray-100">
+                      <span style={{ color: COLORS.gray, fontSize: '14px' }}>{r.display}</span>
                       <span className="font-bold" style={{ fontSize: '14px' }}>{count}</span>
                     </div>
                   );

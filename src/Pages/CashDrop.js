@@ -28,8 +28,9 @@ function CashDrop() {
     date: getPSTDate(),
     startingCash: '200.00',
     cashReceivedOnReceipt: '',
-    pennies: 0, nickels: 0, dimes: 0, quarters: 0, halfDollars: 0,
-    ones: 0, twos: 0, fives: 0, tens: 0, twenties: 0, fifties: 0, hundreds: 0,
+    pennies: 0, nickels: 0, dimes: 0, quarters: 0,
+    ones: 0, fives: 0, tens: 0, twenties: 0, fifties: 0, hundreds: 0,
+    quarterRolls: 0, dimeRolls: 0, nickelRolls: 0, pennyRolls: 0,
     notes: ''
   });
 
@@ -51,13 +52,18 @@ function CashDrop() {
     { name: 'Twenties', value: 20, field: 'twenties', display: 'Twenties ($20)' },
     { name: 'Tens', value: 10, field: 'tens', display: 'Tens ($10)' },
     { name: 'Fives', value: 5, field: 'fives', display: 'Fives ($5)' },
-    { name: 'Twos', value: 2, field: 'twos', display: 'Twos ($2)' },
     { name: 'Ones', value: 1, field: 'ones', display: 'Ones ($1)' },
-    { name: 'Half Dollars', value: 0.50, field: 'halfDollars', display: 'Half Dollars ($0.50)' },
     { name: 'Quarters', value: 0.25, field: 'quarters', display: 'Quarters ($0.25)' },
     { name: 'Dimes', value: 0.10, field: 'dimes', display: 'Dimes ($0.10)' },
     { name: 'Nickels', value: 0.05, field: 'nickels', display: 'Nickels ($0.05)' },
     { name: 'Pennies', value: 0.01, field: 'pennies', display: 'Pennies ($0.01)' },
+  ];
+  // 1 quarter roll = 40×$0.25=$10; 1 dime roll = 50×$0.10=$5; 1 nickel roll = 40×$0.05=$2; 1 penny roll = 50×$0.01=$0.50
+  const ROLLS_CONFIG = [
+    { name: 'Quarter Rolls', value: 10, field: 'quarterRolls', display: 'Quarter Rolls (40×$0.25=$10)' },
+    { name: 'Dime Rolls', value: 5, field: 'dimeRolls', display: 'Dime Rolls (50×$0.10=$5)' },
+    { name: 'Nickel Rolls', value: 2, field: 'nickelRolls', display: 'Nickel Rolls (40×$0.05=$2)' },
+    { name: 'Penny Rolls', value: 0.50, field: 'pennyRolls', display: 'Penny Rolls (50×$0.01=$0.50)' },
   ];
 
   // --- EFFECTS ---
@@ -130,9 +136,7 @@ function CashDrop() {
             twenties: drawerDraft.twenties || 0,
             tens: drawerDraft.tens || 0,
             fives: drawerDraft.fives || 0,
-            twos: drawerDraft.twos || 0,
             ones: drawerDraft.ones || 0,
-            halfDollars: drawerDraft.half_dollars || 0,
             quarters: drawerDraft.quarters || 0,
             dimes: drawerDraft.dimes || 0,
             nickels: drawerDraft.nickels || 0,
@@ -236,9 +240,7 @@ function CashDrop() {
           twenties: drawerDraft ? (drawerDraft.twenties && drawerDraft.twenties !== 0 ? drawerDraft.twenties : '') : '',
           tens: drawerDraft ? (drawerDraft.tens && drawerDraft.tens !== 0 ? drawerDraft.tens : '') : '',
           fives: drawerDraft ? (drawerDraft.fives && drawerDraft.fives !== 0 ? drawerDraft.fives : '') : '',
-          twos: drawerDraft ? (drawerDraft.twos && drawerDraft.twos !== 0 ? drawerDraft.twos : '') : '',
           ones: drawerDraft ? (drawerDraft.ones && drawerDraft.ones !== 0 ? drawerDraft.ones : '') : '',
-          halfDollars: drawerDraft ? (drawerDraft.half_dollars && drawerDraft.half_dollars !== 0 ? drawerDraft.half_dollars : '') : '',
           quarters: drawerDraft ? (drawerDraft.quarters && drawerDraft.quarters !== 0 ? drawerDraft.quarters : '') : '',
           dimes: drawerDraft ? (drawerDraft.dimes && drawerDraft.dimes !== 0 ? drawerDraft.dimes : '') : '',
           nickels: drawerDraft ? (drawerDraft.nickels && drawerDraft.nickels !== 0 ? drawerDraft.nickels : '') : '',
@@ -294,7 +296,7 @@ function CashDrop() {
     }
     
     // Parse numeric values for numeric fields (except cashReceivedOnReceipt which should remain as text to allow decimals)
-    const numericFields = ['startingCash', 'pennies', 'nickels', 'dimes', 'quarters', 'halfDollars', 'ones', 'twos', 'fives', 'tens', 'twenties', 'fifties', 'hundreds'];
+    const numericFields = ['startingCash', 'pennies', 'nickels', 'dimes', 'quarters', 'ones', 'fives', 'tens', 'twenties', 'fifties', 'hundreds', 'quarterRolls', 'dimeRolls', 'nickelRolls', 'pennyRolls'];
     if (numericFields.includes(name)) {
       const numValue = parseFloat(value) || 0;
       setFormData(prev => ({ ...prev, [name]: numValue }));
@@ -304,7 +306,11 @@ function CashDrop() {
     }
   };
 
-  const calculateTotalCash = () => DENOMINATION_CONFIG.reduce((acc, d) => acc + (formData[d.field] * d.value), 0).toFixed(2);
+  const calculateTotalCash = () => {
+    const denomTotal = DENOMINATION_CONFIG.reduce((acc, d) => acc + (formData[d.field] || 0) * d.value, 0);
+    const rollsTotal = ROLLS_CONFIG.reduce((acc, r) => acc + (formData[r.field] || 0) * r.value, 0);
+    return (denomTotal + rollsTotal).toFixed(2);
+  };
   const calculateDropAmount = () => (parseFloat(calculateTotalCash()) - parseFloat(formData.startingCash)).toFixed(2);
   const calculateVariance = () => (parseFloat(calculateDropAmount()) - parseFloat(formData.cashReceivedOnReceipt || 0)).toFixed(2);
 
@@ -359,9 +365,7 @@ function CashDrop() {
         twenties: parseFloat(formData.twenties || 0),
         tens: parseFloat(formData.tens || 0),
         fives: parseFloat(formData.fives || 0),
-        twos: parseFloat(formData.twos || 0),
         ones: parseFloat(formData.ones || 0),
-        half_dollars: parseFloat(formData.halfDollars || 0),
         quarters: parseFloat(formData.quarters || 0),
         dimes: parseFloat(formData.dimes || 0),
         nickels: parseFloat(formData.nickels || 0),
@@ -408,9 +412,14 @@ function CashDrop() {
       if (labelImage) dropForm.append('label_image', labelImage);
 
       Object.keys(cashDropDenominations || {}).forEach(key => {
-        const backendKey = key === 'halfDollars' ? 'half_dollars' : key;
-        dropForm.append(backendKey, cashDropDenominations[key] || 0);
+        dropForm.append(key, cashDropDenominations[key] || 0);
       });
+      dropForm.append('twos', 0);
+      dropForm.append('half_dollars', 0);
+      dropForm.append('quarter_rolls', formData.quarterRolls || 0);
+      dropForm.append('dime_rolls', formData.dimeRolls || 0);
+      dropForm.append('nickel_rolls', formData.nickelRolls || 0);
+      dropForm.append('penny_rolls', formData.pennyRolls || 0);
 
       let dropRes;
       if (draftId) {
@@ -442,8 +451,9 @@ function CashDrop() {
         date: getPSTDate(),
         startingCash: adminSettings.starting_amount.toString(),
         cashReceivedOnReceipt: '',
-        pennies: 0, nickels: 0, dimes: 0, quarters: 0, halfDollars: 0,
-        ones: 0, twos: 0, fives: 0, tens: 0, twenties: 0, fifties: 0, hundreds: 0,
+        pennies: 0, nickels: 0, dimes: 0, quarters: 0,
+        ones: 0, fives: 0, tens: 0, twenties: 0, fifties: 0, hundreds: 0,
+        quarterRolls: 0, dimeRolls: 0, nickelRolls: 0, pennyRolls: 0,
         notes: ''
       });
       setLabelImage(null);
@@ -488,8 +498,9 @@ function CashDrop() {
         date: getPSTDate(),
         startingCash: adminSettings.starting_amount.toString(),
         cashReceivedOnReceipt: '',
-        pennies: 0, nickels: 0, dimes: 0, quarters: 0, halfDollars: 0,
-        ones: 0, twos: 0, fives: 0, tens: 0, twenties: 0, fifties: 0, hundreds: 0,
+        pennies: 0, nickels: 0, dimes: 0, quarters: 0,
+        ones: 0, fives: 0, tens: 0, twenties: 0, fifties: 0, hundreds: 0,
+        quarterRolls: 0, dimeRolls: 0, nickelRolls: 0, pennyRolls: 0,
         notes: ''
       });
       setLabelImage(null);
@@ -558,9 +569,7 @@ function CashDrop() {
         twenties: parseFloat(formData.twenties || 0),
         tens: parseFloat(formData.tens || 0),
         fives: parseFloat(formData.fives || 0),
-        twos: parseFloat(formData.twos || 0),
         ones: parseFloat(formData.ones || 0),
-        half_dollars: parseFloat(formData.halfDollars || 0),
         quarters: parseFloat(formData.quarters || 0),
         dimes: parseFloat(formData.dimes || 0),
         nickels: parseFloat(formData.nickels || 0),
@@ -610,9 +619,14 @@ function CashDrop() {
       if (labelImage) dropForm.append('label_image', labelImage);
 
       Object.keys(cashDropDenominations).forEach(key => {
-        const backendKey = key === 'halfDollars' ? 'half_dollars' : key;
-        dropForm.append(backendKey, cashDropDenominations[key]);
+        dropForm.append(key, cashDropDenominations[key]);
       });
+      dropForm.append('twos', 0);
+      dropForm.append('half_dollars', 0);
+      dropForm.append('quarter_rolls', formData.quarterRolls || 0);
+      dropForm.append('dime_rolls', formData.dimeRolls || 0);
+      dropForm.append('nickel_rolls', formData.nickelRolls || 0);
+      dropForm.append('penny_rolls', formData.pennyRolls || 0);
 
       let dropRes;
       if (draftId) {
@@ -740,6 +754,19 @@ function CashDrop() {
                     <div key={d.field} className="flex justify-between items-center">
                       <span className="text-xs font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>{d.display}</span>
                       <input type="text" name={d.field} value={isZero ? '' : String(val)} onChange={handleChange} autoComplete="off" className="w-20 p-1 border rounded text-right" style={{ fontSize: '14px' }} />
+                    </div>
+                  );
+                })}
+                <div className="mt-4 pt-3 border-t border-gray-200">
+                  <span className="text-xs font-bold uppercase" style={{ color: COLORS.gray, fontSize: '12px' }}>Rolls</span>
+                </div>
+                {ROLLS_CONFIG.map(r => {
+                  const val = formData[r.field];
+                  const isZero = val == null || Number(val) === 0;
+                  return (
+                    <div key={r.field} className="flex justify-between items-center">
+                      <span className="text-xs font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>{r.display}</span>
+                      <input type="text" name={r.field} value={isZero ? '' : String(val)} onChange={handleChange} autoComplete="off" className="w-20 p-1 border rounded text-right" style={{ fontSize: '14px' }} />
                     </div>
                   );
                 })}

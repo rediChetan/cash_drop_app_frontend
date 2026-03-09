@@ -28,13 +28,17 @@ function CashDropValidation() {
     { name: 'twenties', value: 20, display: 'Twenties ($20)' },
     { name: 'tens', value: 10, display: 'Tens ($10)' },
     { name: 'fives', value: 5, display: 'Fives ($5)' },
-    { name: 'twos', value: 2, display: 'Twos ($2)' },
     { name: 'ones', value: 1, display: 'Ones ($1)' },
-    { name: 'half_dollars', value: 0.50, display: 'Half Dollars ($0.50)' },
     { name: 'quarters', value: 0.25, display: 'Quarters ($0.25)' },
     { name: 'dimes', value: 0.10, display: 'Dimes ($0.10)' },
     { name: 'nickels', value: 0.05, display: 'Nickels ($0.05)' },
     { name: 'pennies', value: 0.01, display: 'Pennies ($0.01)' },
+  ];
+  const ROLLS_DISPLAY = [
+    { name: 'quarter_rolls', value: 10, display: 'Quarter Rolls ($10)' },
+    { name: 'dime_rolls', value: 5, display: 'Dime Rolls ($5)' },
+    { name: 'nickel_rolls', value: 2, display: 'Nickel Rolls ($2)' },
+    { name: 'penny_rolls', value: 0.50, display: 'Penny Rolls ($0.50)' },
   ];
   
   const toggleRow = (itemId) => {
@@ -102,7 +106,9 @@ function CashDropValidation() {
   const getCustomDenomSum = (itemId) => {
     const denoms = customDenominations[itemId];
     if (!denoms) return 0;
-    return DENOMINATION_CONFIG.reduce((sum, d) => sum + (parseFloat(denoms[d.name]) || 0) * d.value, 0);
+    const denomSum = DENOMINATION_CONFIG.reduce((sum, d) => sum + (parseFloat(denoms[d.name]) || 0) * d.value, 0);
+    const rollsSum = ROLLS_DISPLAY.reduce((sum, d) => sum + (parseFloat(denoms[d.name]) || 0) * d.value, 0);
+    return denomSum + rollsSum;
   };
 
   const handleReconcile = async (item, withDelta = false) => {
@@ -129,10 +135,16 @@ function CashDropValidation() {
       setShowNotesField(prev => ({ ...prev, [item.id]: true }));
       setCustomDenominations(prev => ({
         ...prev,
-        [item.id]: DENOMINATION_CONFIG.reduce((acc, d) => {
-          acc[d.name] = item[d.name] != null ? Number(item[d.name]) : 0;
-          return acc;
-        }, {})
+        [item.id]: {
+          ...DENOMINATION_CONFIG.reduce((acc, d) => {
+            acc[d.name] = item[d.name] != null ? Number(item[d.name]) : 0;
+            return acc;
+          }, {}),
+          ...ROLLS_DISPLAY.reduce((acc, d) => {
+            acc[d.name] = item[d.name] != null ? Number(item[d.name]) : 0;
+            return acc;
+          }, {})
+        }
       }));
       return;
     }
@@ -165,6 +177,10 @@ function CashDropValidation() {
 
     if (withDelta && hasDelta && customDenominations[item.id]) {
       DENOMINATION_CONFIG.forEach(d => {
+        const v = customDenominations[item.id][d.name];
+        requestBody[d.name] = typeof v === 'number' ? v : (parseFloat(v) || 0);
+      });
+      ROLLS_DISPLAY.forEach(d => {
         const v = customDenominations[item.id][d.name];
         requestBody[d.name] = typeof v === 'number' ? v : (parseFloat(v) || 0);
       });
@@ -483,6 +499,30 @@ function CashDropValidation() {
                                           </div>
                                         );
                                       })}
+                                      {ROLLS_DISPLAY.map(denom => {
+                                        const val = customDenominations[item.id][denom.name];
+                                        const isZero = val == null || Number(val) === 0;
+                                        return (
+                                          <div key={denom.name} className="flex justify-between text-xs bg-gray-50 p-2 rounded border">
+                                            <span style={{ color: COLORS.gray, fontSize: '14px' }}>{denom.display}</span>
+                                            <input
+                                              type="text"
+                                              inputMode="numeric"
+                                              autoComplete="off"
+                                              className="w-16 p-1 border rounded text-right font-bold bg-white"
+                                              style={{ fontSize: '14px' }}
+                                              value={isZero ? '' : String(val)}
+                                              onChange={(e) => {
+                                                const v = e.target.value.trim();
+                                                setCustomDenominations(prev => ({
+                                                  ...prev,
+                                                  [item.id]: { ...prev[item.id], [denom.name]: v === '' ? 0 : (parseFloat(v) || 0) }
+                                                }));
+                                              }}
+                                            />
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                     <p className="text-xs font-bold mt-2" style={{ color: COLORS.gray, fontSize: '14px' }}>
                                       Total: ${getCustomDenomSum(item.id).toFixed(2)}
@@ -562,6 +602,15 @@ function CashDropValidation() {
                               <h4 className="font-black uppercase mb-3 tracking-widest border-b pb-2" style={{ fontSize: '18px', color: COLORS.gray }}>Denominations</h4>
                               <div className="grid grid-cols-2 gap-2">
                                 {DENOMINATION_CONFIG.map(denom => {
+                                  const value = item[denom.name] || 0;
+                                  return (
+                                    <div key={denom.name} className="flex justify-between text-xs bg-gray-50 p-2 rounded border">
+                                      <span style={{ color: COLORS.gray, fontSize: '14px' }}>{denom.display}</span>
+                                      <span className="font-bold" style={{ fontSize: '14px' }}>{value}</span>
+                                    </div>
+                                  );
+                                })}
+                                {ROLLS_DISPLAY.map(denom => {
                                   const value = item[denom.name] || 0;
                                   return (
                                     <div key={denom.name} className="flex justify-between text-xs bg-gray-50 p-2 rounded border">
