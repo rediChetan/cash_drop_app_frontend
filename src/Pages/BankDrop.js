@@ -51,6 +51,9 @@ const BankDrop = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [batchViewData, setBatchViewData] = useState([]);
   const [loadingBatchView, setLoadingBatchView] = useState(false);
+  const [expandedBatchForDenoms, setExpandedBatchForDenoms] = useState(null);
+  const [batchDenomCache, setBatchDenomCache] = useState({});
+  const [loadingBatchDenoms, setLoadingBatchDenoms] = useState(null);
 
   const showStatusMessage = (text, type = 'info') => {
     setStatusMessage({ show: true, text, type });
@@ -452,6 +455,49 @@ const BankDrop = () => {
     });
   };
 
+  const toggleBatchDenoms = async (batchNumber) => {
+    if (expandedBatchForDenoms === batchNumber) {
+      setExpandedBatchForDenoms(null);
+      return;
+    }
+    if (batchDenomCache[batchNumber]) {
+      setExpandedBatchForDenoms(batchNumber);
+      return;
+    }
+    setExpandedBatchForDenoms(batchNumber);
+    setLoadingBatchDenoms(batchNumber);
+    const token = sessionStorage.getItem('access_token');
+    try {
+      const response = await fetch(API_ENDPOINTS.BANK_DROP_SUMMARY, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ batch_numbers: [batchNumber] })
+      });
+      if (response.ok) {
+        const summary = await response.json();
+        setBatchDenomCache(prev => ({
+          ...prev,
+          [batchNumber]: {
+            totals: summary.totals || {},
+            total_amount: summary.total_amount ?? 0
+          }
+        }));
+      } else {
+        showStatusMessage('Failed to load batch denominations', 'error');
+        setExpandedBatchForDenoms(null);
+      }
+    } catch (err) {
+      console.error('Fetch batch denominations error:', err);
+      showStatusMessage('Failed to load batch denominations', 'error');
+      setExpandedBatchForDenoms(null);
+    } finally {
+      setLoadingBatchDenoms(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 py-4 md:py-6" style={{ fontFamily: 'Calibri, Verdana, sans-serif', fontSize: '14px', color: COLORS.gray }}>
       {/* Status Message */}
@@ -769,42 +815,88 @@ const BankDrop = () => {
                   <th className="p-2">Drops</th>
                   <th className="p-2">Date</th>
                   <th className="p-2">Amount</th>
+                  <th className="p-2 w-10"></th>
                 </tr>
               </thead>
               <tbody>
                 {loadingHistory ? (
                   <tr>
-                    <td colSpan="5" className="p-4 text-center font-bold" style={{ color: COLORS.gray }}>Loading...</td>
+                    <td colSpan="6" className="p-4 text-center font-bold" style={{ color: COLORS.gray }}>Loading...</td>
                   </tr>
                 ) : batchHistory.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="p-4 text-center italic" style={{ color: COLORS.gray }}>No dropped batches yet</td>
+                    <td colSpan="6" className="p-4 text-center italic" style={{ color: COLORS.gray }}>No dropped batches yet</td>
                   </tr>
                 ) : (
                   batchHistory.map((row) => (
-                    <tr
-                      key={row.id || row.batch_number}
-                      onClick={() => toggleBatchFromHistory(row.batch_number)}
-                      className={`border-b cursor-pointer transition-colors ${selectedBatchNumbers.has(row.batch_number) ? 'bg-pink-100' : 'hover:bg-pink-50/30'}`}
-                    >
-                      <td className="p-2" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedBatchNumbers.has(row.batch_number)}
-                          onChange={() => toggleBatchFromHistory(row.batch_number)}
-                          className="w-4 h-4"
-                          style={{ accentColor: COLORS.magenta }}
-                        />
-                      </td>
-                      <td className="p-2 font-bold" style={{ color: COLORS.magenta }}>{row.batch_number}</td>
-                      <td className="p-2" style={{ color: COLORS.gray }}>{row.drop_count}</td>
-                      <td className="p-2 text-xs" style={{ color: COLORS.gray }}>
-                        {row.created_at ? new Date(row.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}
-                      </td>
-                      <td className="p-2 font-bold" style={{ color: COLORS.yellowGreen }}>
-                        {row.batch_drop_amount != null ? `$${Number(row.batch_drop_amount).toFixed(2)}` : '—'}
-                      </td>
-                    </tr>
+                    <React.Fragment key={row.id || row.batch_number}>
+                      <tr
+                        onClick={() => toggleBatchFromHistory(row.batch_number)}
+                        className={`border-b cursor-pointer transition-colors ${selectedBatchNumbers.has(row.batch_number) ? 'bg-pink-100' : 'hover:bg-pink-50/30'}`}
+                      >
+                        <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedBatchNumbers.has(row.batch_number)}
+                            onChange={() => toggleBatchFromHistory(row.batch_number)}
+                            className="w-4 h-4"
+                            style={{ accentColor: COLORS.magenta }}
+                          />
+                        </td>
+                        <td className="p-2 font-bold" style={{ color: COLORS.magenta }}>{row.batch_number}</td>
+                        <td className="p-2" style={{ color: COLORS.gray }}>{row.drop_count}</td>
+                        <td className="p-2 text-xs" style={{ color: COLORS.gray }}>
+                          {row.created_at ? new Date(row.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                        </td>
+                        <td className="p-2 font-bold" style={{ color: COLORS.yellowGreen }}>
+                          {row.batch_drop_amount != null ? `$${Number(row.batch_drop_amount).toFixed(2)}` : '—'}
+                        </td>
+                        <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => toggleBatchDenoms(row.batch_number)}
+                            disabled={loadingBatchDenoms === row.batch_number}
+                            className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 hover:bg-gray-300 transition-colors disabled:opacity-50"
+                            style={{ color: COLORS.gray }}
+                            title="View batch denominations"
+                          >
+                            {expandedBatchForDenoms === row.batch_number ? '−' : '+'}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedBatchForDenoms === row.batch_number && (
+                        <tr className="bg-gray-50 border-b">
+                          <td colSpan="6" className="p-4">
+                            {loadingBatchDenoms === row.batch_number ? (
+                              <p className="text-center font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>Loading denominations...</p>
+                            ) : batchDenomCache[row.batch_number] ? (
+                              <div className="bg-white border rounded-lg p-4 max-w-md">
+                                <h4 className="font-black uppercase mb-3 tracking-widest border-b pb-2" style={{ fontSize: '16px', color: COLORS.gray }}>
+                                  Batch denominations
+                                </h4>
+                                <div className="grid grid-cols-2 gap-2 mb-3">
+                                  {DENOMINATION_CONFIG.map(denom => {
+                                    const count = batchDenomCache[row.batch_number].totals[denom.field] || 0;
+                                    return (
+                                      <div key={denom.field} className="flex justify-between text-xs bg-gray-50 p-2 rounded border">
+                                        <span style={{ color: COLORS.gray, fontSize: '13px' }}>{denom.display}</span>
+                                        <span className="font-bold" style={{ fontSize: '13px' }}>{count}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
+                                  <span className="font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>Total:</span>
+                                  <span className="font-black" style={{ fontSize: '16px', color: COLORS.yellowGreen }}>
+                                    ${(batchDenomCache[row.batch_number].total_amount || 0).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
