@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_ENDPOINTS } from '../config/api';
-import { getPSTDate, isAllowedCashDropDate } from '../utils/dateUtils';
+import { getPSTDate } from '../utils/dateUtils';
 
 function CashDrop() {
   const navigate = useNavigate();
@@ -45,6 +45,10 @@ function CashDrop() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftId, setDraftId] = useState(null);
   const [draftDrawerId, setDraftDrawerId] = useState(null);
+  // Calendar: { date, canCashDrop, isCurrentDay }[] for the month currently viewed in picker or selected date
+  const [calendarDates, setCalendarDates] = useState([]);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [pickerView, setPickerView] = useState({ year: null, month: null }); // month 1-12, when open
   
   const DENOMINATION_CONFIG = [
     { name: 'Hundreds', value: 100, field: 'hundreds', display: 'Hundreds ($100)' },
@@ -273,6 +277,33 @@ function CashDrop() {
     calculateDenominations();
   }, [formData]);
 
+  // Which month to fetch: when picker is open use pickerView, else use selected date's month
+  const calendarTarget = datePickerOpen && pickerView.year && pickerView.month
+    ? pickerView
+    : (() => {
+        const dateStr = formData.date || getPSTDate();
+        const parts = dateStr.split('-');
+        return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) };
+      })();
+
+  // Fetch cash drop calendar for the target month
+  useEffect(() => {
+    const { year: y, month: m } = calendarTarget;
+    if (!y || !m) return;
+    const fetchCalendar = async () => {
+      try {
+        const res = await fetch(API_ENDPOINTS.CASH_DROP_CALENDAR(y, m));
+        if (res.ok) {
+          const data = await res.json();
+          setCalendarDates(data.dates || []);
+        }
+      } catch (e) {
+        console.error('Error fetching cash drop calendar:', e);
+      }
+    };
+    fetchCalendar();
+  }, [calendarTarget.year, calendarTarget.month]);
+
   // --- HELPERS ---
   const showStatusMessage = (text, type = 'info') => {
     setStatusMessage({ show: true, text, type });
@@ -282,17 +313,10 @@ function CashDrop() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    // Prevent selecting prior day's dates
-    if (name === 'date') {
-      const selectedDate = new Date(value + 'T00:00:00-08:00'); // PST
-      const today = new Date(getPSTDate() + 'T00:00:00-08:00'); // PST
-      today.setHours(0, 0, 0, 0);
-      selectedDate.setHours(0, 0, 0, 0);
-      
-      if (selectedDate < (today -  3 * 24 * 60 * 60 * 1000)) {
-        showStatusMessage('Cannot select prior days which are over 72 hrs old. Cash drop is for immediate shift/day closure.', 'error');
-        return;
-      }
+    // Prevent selecting future dates
+    if (name === 'date' && value > getPSTDate()) {
+      showStatusMessage('Cannot select a future date.', 'error');
+      return;
     }
     
     // Parse numeric values for numeric fields (except cashReceivedOnReceipt which should remain as text to allow decimals)
@@ -344,9 +368,13 @@ function CashDrop() {
     return mathCheck && drop > 0 && formData.workStation;
   };
 
+  // Whether selected date is allowed for cash drop (from calendar API)
+  const selectedDateInfo = calendarDates.find(d => d.date === formData.date);
+  const isSelectedDateAllowed = selectedDateInfo ? selectedDateInfo.canCashDrop : null; // null = unknown (e.g. loading)
+
   const handleSaveDraft = async () => {
-    if (!isAllowedCashDropDate(formData.date)) {
-      showStatusMessage('Drafts can only be saved for the current day or the previous day (PST).', 'error');
+    if (isSelectedDateAllowed === false) {
+      showStatusMessage('Cash drop is not allowed for this date (check admin settings).', 'error');
       return;
     }
     const token = sessionStorage.getItem('access_token');
@@ -517,8 +545,8 @@ function CashDrop() {
   };
 
   const handleSubmit = async () => {
-    if (!isAllowedCashDropDate(formData.date)) {
-      showStatusMessage('Cash drop can only be submitted for the current day or the previous day (PST).', 'error');
+    if (isSelectedDateAllowed === false) {
+      showStatusMessage('Cash drop is not allowed for this date (check admin settings).', 'error');
       return;
     }
     const token = sessionStorage.getItem('access_token');
@@ -731,10 +759,98 @@ function CashDrop() {
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Employee</label>
                 <div className="p-2 bg-transparent border-b border-gray-300 font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>{formData.employeeName}</div>
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col relative">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Date</label>
-                <input type="date" name="date" value={formData.date} onChange={handleChange} min={getPSTDate()-2*24*60*60*1000} max={getPSTDate()} autoComplete="off" className="p-2 bg-white border-b border-gray-300 font-bold focus:border-pink-600 outline-none" style={{ fontSize: '14px', color: COLORS.gray }} />
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const [y, m] = (formData.date || getPSTDate()).split('-').map(Number);
+                    setPickerView({ year: y, month: m });
+                    setDatePickerOpen(true);
+                  }}
+                  className="p-2 bg-white border-b border-gray-300 font-bold text-left focus:border-pink-600 outline-none focus:ring-1 focus:ring-pink-500 rounded-t"
+                  style={{ fontSize: '14px', color: COLORS.gray }}
+                >
+                  {formData.date || getPSTDate()}
+                </button>
+                {/* Custom calendar popover: colored days when selecting date */}
+                {datePickerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" aria-hidden onClick={() => setDatePickerOpen(false)} />
+                    <div className="absolute left-0 top-full z-50 mt-1 p-3 bg-white border border-gray-200 rounded-lg shadow-xl min-w-[260px]">
+                      <div className="flex items-center justify-between mb-2">
+                        <button
+                          type="button"
+                          onClick={() => setPickerView(prev => {
+                            const d = new Date(prev.year, prev.month - 1, 1);
+                            d.setMonth(d.getMonth() - 1);
+                            return { year: d.getFullYear(), month: d.getMonth() + 1 };
+                          })}
+                          className="p-1 rounded hover:bg-gray-100 font-bold"
+                          style={{ color: COLORS.gray }}
+                        >
+                          ‹
+                        </button>
+                        <span className="font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>
+                          {new Date(pickerView.year, pickerView.month - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPickerView(prev => {
+                            const d = new Date(prev.year, prev.month - 1, 1);
+                            d.setMonth(d.getMonth() + 1);
+                            return { year: d.getFullYear(), month: d.getMonth() + 1 };
+                          })}
+                          className="p-1 rounded hover:bg-gray-100 font-bold"
+                          style={{ color: COLORS.gray }}
+                        >
+                          ›
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-7 gap-0.5 text-center" style={{ fontSize: '12px' }}>
+                        {['S','M','T','W','T','F','S'].map(d => <span key={d} className="font-bold py-1" style={{ color: COLORS.gray }}>{d}</span>)}
+                        {(() => {
+                          const first = new Date(pickerView.year, pickerView.month - 1, 1);
+                          const startPad = first.getDay();
+                          const daysInMonth = new Date(pickerView.year, pickerView.month, 0).getDate();
+                          const today = getPSTDate();
+                          const cells = [];
+                          for (let i = 0; i < startPad; i++) cells.push(<span key={`pad-${i}`} />);
+                          for (let d = 1; d <= daysInMonth; d++) {
+                            const dateStr = `${pickerView.year}-${String(pickerView.month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                            const info = calendarDates.find(x => x.date === dateStr);
+                            const isCurrent = dateStr === today;
+                            const canDrop = info?.canCashDrop;
+                            const isSelected = formData.date === dateStr;
+                            let bg = 'bg-gray-100';
+                            if (isCurrent) bg = 'bg-blue-500 text-white';
+                            else if (canDrop === true) bg = 'bg-green-500 text-white';
+                            else if (canDrop === false) bg = 'bg-red-500 text-white';
+                            const isFuture = dateStr > today;
+                            cells.push(
+                              <button
+                                key={dateStr}
+                                type="button"
+                                onClick={() => {
+                                  if (isFuture) return;
+                                  setFormData(prev => ({ ...prev, date: dateStr }));
+                                  setDatePickerOpen(false);
+                                }}
+                                disabled={isFuture}
+                                className={`py-1.5 rounded ${bg} ${isSelected ? 'ring-2 ring-offset-1 ring-black' : ''} ${isFuture ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
+                                title={info ? (canDrop ? 'Can add cash drop' : 'Cannot add cash drop') : dateStr}
+                              >
+                                {d}
+                              </button>
+                            );
+                          }
+                          return cells;
+                        })()}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             <div className="flex flex-col">
                 <label className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>Starting Cash</label>
                 <div className="p-2 bg-transparent border-b border-gray-300 font-bold" style={{ fontSize: '14px', color: COLORS.magenta }}>${formData.startingCash}</div>

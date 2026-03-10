@@ -118,13 +118,17 @@ const Dashboard = () => {
         shifts: [],
         workstations: [],
         starting_amount: 200.00,
-        max_cash_drops_per_day: 10
+        max_cash_drops_per_day: 10,
+        cash_drop_date_range: 'last_2_days',
+        cash_drop_only_before_bank_drop: false
     });
     const [originalSettings, setOriginalSettings] = useState({
         shifts: [],
         workstations: [],
         starting_amount: 200.00,
-        max_cash_drops_per_day: 10
+        max_cash_drops_per_day: 10,
+        cash_drop_date_range: 'last_2_days',
+        cash_drop_only_before_bank_drop: false
     });
     const [newShift, setNewShift] = useState('');
     const [newWorkstation, setNewWorkstation] = useState('');
@@ -605,6 +609,35 @@ const Dashboard = () => {
                                     className="w-full p-2 border rounded"
                                     style={{ fontSize: '14px' }}
                                 />
+                            </div>
+
+                            {/* Cash drop date range */}
+                            <div>
+                                <label className="block font-bold mb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Cash drop allowed for</label>
+                                <select
+                                    value={settings.cash_drop_date_range}
+                                    onChange={(e) => setSettings(prev => ({ ...prev, cash_drop_date_range: e.target.value }))}
+                                    className="w-full p-2 border rounded"
+                                    style={{ fontSize: '14px' }}
+                                >
+                                    <option value="last_2_days">Last 2 days (today + yesterday)</option>
+                                    <option value="all_previous">All previous days</option>
+                                </select>
+                            </div>
+
+                            {/* Only before bank drop */}
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="cash_drop_only_before_bank_drop"
+                                    checked={settings.cash_drop_only_before_bank_drop}
+                                    onChange={(e) => setSettings(prev => ({ ...prev, cash_drop_only_before_bank_drop: e.target.checked }))}
+                                    className="w-4 h-4"
+                                    style={{ accentColor: COLORS.magenta }}
+                                />
+                                <label htmlFor="cash_drop_only_before_bank_drop" className="font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>
+                                    Only allow cash drop for days where bank drop is not done
+                                </label>
                             </div>
                         </div>
                         <div className="mt-6">

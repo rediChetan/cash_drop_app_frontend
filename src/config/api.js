@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
   
   // Admin Settings endpoints
   ADMIN_SETTINGS: `${API_BASE_URL}/api/admin-settings`,
+  CASH_DROP_CALENDAR: (year, month) => `${API_BASE_URL}/api/admin-settings/cash-drop-calendar?year=${year}&month=${month}`,
   
   // Ignore Cash Drop
   IGNORE_CASH_DROP: `${API_BASE_URL}/api/cash-drop-app1/cash-drop/ignore`,
