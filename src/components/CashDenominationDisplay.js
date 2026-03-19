@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 /** Bills: hundreds through ones */
 export const BILLS_DENOMINATIONS = [
@@ -42,7 +42,7 @@ const tableHeaderClassSpacious = 'text-left text-xs font-black uppercase trackin
 const cellClassSpacious = 'text-sm py-2 px-3 border-b border-gray-100';
 
 /**
- * Cash Drop Dashboard / Bank Drop style: Bills | Coins&Rolls, Sub Totals, Grand Total, optional Variance.
+ * Cash Drop Dashboard / Bank Drop style: Bills | Coins&Rolls, Sub Totals, Grand Total, optional Reconcile Delta (Adjusted total − Cash drop total).
  */
 export function CashDenominationDisplay({
   record,
@@ -53,6 +53,7 @@ export function CashDenominationDisplay({
   variance,
   className = '',
   spacious = false,
+  singleColumn = false,
 }) {
   if (!record) return null;
   const billsSub = computeBillsSubtotal(record);
@@ -93,7 +94,7 @@ export function CashDenominationDisplay({
       <h4 className="font-black uppercase tracking-widest border-b pb-2" style={{ fontSize: spacious ? '16px' : '14px', color: grayColor }}>
         {title}
       </h4>
-      <div className={`grid grid-cols-1 lg:grid-cols-2 ${spacious ? 'gap-6 lg:gap-8' : 'gap-4'}`}>
+      <div className={`grid ${singleColumn ? 'grid-cols-1 gap-4' : `grid-cols-1 lg:grid-cols-2 ${spacious ? 'gap-6 lg:gap-8' : 'gap-4'}`}`}>
         <div className="min-w-0 overflow-x-auto">
           <p className="text-xs font-bold uppercase mb-2" style={{ color: grayColor }}>Bills</p>
           {renderTable(BILLS_DENOMINATIONS)}
@@ -103,7 +104,7 @@ export function CashDenominationDisplay({
           {renderTable(COINS_ROLLS_DENOMINATIONS)}
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
+      <div className={`grid gap-3 lg:gap-4 ${singleColumn ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
         <div className="flex justify-between items-center px-3 py-2.5 bg-gray-50 rounded-lg border text-sm font-bold" style={{ color: magentaColor }}>
           <span>Sub Total</span>
           <span>${billsSub.toFixed(2)}</span>
@@ -119,7 +120,7 @@ export function CashDenominationDisplay({
       </div>
       {showVariance && variance !== undefined && variance !== null && (
         <div className="flex justify-between px-3 py-2 rounded border text-sm font-bold" style={{ color: grayColor }}>
-          <span>Variance</span>
+          <span>Reconcile Delta (Adjusted total − Cash drop total)</span>
           <span className={parseFloat(variance) !== 0 ? 'text-red-500' : ''}>${parseFloat(variance || 0).toFixed(2)}</span>
         </div>
       )}
@@ -172,11 +173,12 @@ export function CashDenominationEditor({
   onCountedCheckedChange,
   onChange,
   targetTotal,
+  onTotalChange,
   grayColor = '#64748B',
   magentaColor = '#AA056C',
   greenColor = '#22C55E',
   sectionTitle = 'Cash drop total',
-  helpText = 'Cash drop column shows reported counts. Use Adj. count for your physical count (must total the Counted Amount). Check ✓ as you verify each line. For a delta, add notes and use Reconcile with Delta.',
+  helpText = 'Cash drop column shows reported counts. Tick Counted ✓ to use cash drop as adjusted count; or type in Adj. count. Total below is synced to Counted Amount in the row above.',
   spacious = false,
 }) {
   const record = values || {};
@@ -187,7 +189,21 @@ export function CashDenominationEditor({
   const thClass = spacious ? tableHeaderClassSpacious : tableHeaderClass;
   const tdClass = spacious ? cellClassSpacious : cellClass;
 
-  const renderEditorTable = (denoms) => (
+  useEffect(() => {
+    if (typeof onTotalChange === 'function') onTotalChange(grand);
+  }, [grand]);
+
+  const handleCountedChange = (name, checked) => {
+    onCountedCheckedChange?.(name, checked);
+    if (checked) {
+      const sysCount = Number(sys[name]) || 0;
+      onChange(name, sysCount);
+    } else {
+      onChange(name, 0);
+    }
+  };
+
+  const renderEditorTable = (denoms, adjustedSubTotal) => (
     <table
       className={`w-full border border-gray-200 rounded-lg overflow-hidden bg-white ${spacious ? 'text-sm' : 'text-xs md:text-sm min-w-0'}`}
       style={spacious ? { minWidth: '320px' } : undefined}
@@ -195,24 +211,25 @@ export function CashDenominationEditor({
       <thead>
         <tr style={{ backgroundColor: '#f3f4f6' }}>
           <th className={`${thClass} ${spacious ? 'min-w-[120px] text-left pl-3' : 'max-w-[100px]'}`} style={{ color: grayColor }}>Denomination</th>
-          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[64px]' : 'px-1'}`} style={{ color: grayColor }}>Cash drop</th>
-          <th className={`${thClass} text-center whitespace-nowrap ${spacious ? 'w-10 min-w-[40px]' : 'w-10 px-0'}`} style={{ color: grayColor }} title="After counting">✓</th>
-          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[64px]' : 'px-1'}`} style={{ color: grayColor }}>Adj. count</th>
-          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[48px]' : 'px-1'}`} style={{ color: grayColor }}>Adj. $</th>
-          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[48px]' : 'px-1'}`} style={{ color: greenColor }}>Counted</th>
-          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[44px]' : 'px-1'}`} style={{ color: greenColor }}>$</th>
+          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[64px]' : 'px-1'}`} style={{ color: grayColor }}>Count</th>
+          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[64px]' : 'px-1'}`} style={{ color: grayColor }}>Amount</th>
+          <th className={`${thClass} text-center whitespace-nowrap ${spacious ? 'w-10 min-w-[40px]' : 'w-10 px-0'}`} style={{ color: grayColor }} title="Counted: use cash drop as adjusted">✓</th>
+          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[64px]' : 'px-1'}`} style={{ color: grayColor }}>Adj. Count</th>
+          <th className={`${thClass} text-right whitespace-nowrap ${spacious ? 'px-2 min-w-[64px]' : 'px-1'}`} style={{ color: grayColor }}>Adj. Amount</th>
         </tr>
       </thead>
       <tbody>
         {denoms.map((d) => {
           const adjCount = Number(record[d.name]) || 0;
           const sysCount = Number(sys[d.name]) || 0;
+          const sysAmt = Math.round(sysCount * d.value * 100) / 100;
           const amt = Math.round(adjCount * d.value * 100) / 100;
           const checked = countedChecked?.[d.name];
           return (
             <tr key={d.name}>
               <td className={`${tdClass} ${spacious ? 'min-w-[120px] pl-3' : 'truncate max-w-[90px]'}`} style={{ color: grayColor }} title={d.display}>{d.display}</td>
               <td className={`${tdClass} text-right font-bold text-gray-500`}>{sysCount}</td>
+              <td className={`${tdClass} text-right font-bold text-gray-500`}>${sysAmt.toFixed(2)}</td>
               <td className={`${tdClass} text-center px-0`}>
                 <input
                   type="checkbox"
@@ -220,7 +237,7 @@ export function CashDenominationEditor({
                   className={spacious ? 'w-4 h-4' : 'w-3.5 h-3.5 md:w-4 md:h-4'}
                   style={{ accentColor: magentaColor }}
                   checked={!!checked}
-                  onChange={(e) => onCountedCheckedChange?.(d.name, e.target.checked)}
+                  onChange={(e) => handleCountedChange(d.name, e.target.checked)}
                 />
               </td>
               <td className={`${tdClass} text-right ${spacious ? 'p-2' : 'p-1'}`}>
@@ -228,17 +245,17 @@ export function CashDenominationEditor({
                   type="text"
                   inputMode="numeric"
                   autoComplete="off"
-                  className={`w-full min-w-0 border rounded text-right mx-auto block ${spacious ? 'max-w-[64px] p-1.5 text-sm' : 'max-w-[52px] p-0.5 text-xs'}`}
+                  disabled={!!checked}
+                  className={`w-full min-w-0 border rounded text-right mx-auto block ${spacious ? 'max-w-[64px] p-1.5 text-sm' : 'max-w-[52px] p-0.5 text-xs'} ${checked ? 'bg-gray-100' : ''}`}
                   value={adjCount === 0 ? '' : String(adjCount)}
                   onChange={(e) => {
+                    if (checked) return;
                     const v = e.target.value.trim();
                     onChange(d.name, v === '' ? 0 : (parseInt(v, 10) || 0));
                   }}
                 />
               </td>
               <td className={`${tdClass} text-right font-mono ${spacious ? 'text-xs' : 'text-[11px]'}`} style={{ color: magentaColor }}>${amt.toFixed(2)}</td>
-              <td className={`${tdClass} text-right font-bold`} style={{ color: greenColor }}>{adjCount}</td>
-              <td className={`${tdClass} text-right font-bold`} style={{ color: greenColor }}>${amt.toFixed(2)}</td>
             </tr>
           );
         })}
@@ -257,11 +274,11 @@ export function CashDenominationEditor({
       <div className={`grid grid-cols-1 xl:grid-cols-2 ${spacious ? 'gap-8 xl:gap-12' : 'gap-4'}`}>
         <div className={`min-w-0 overflow-x-auto ${spacious ? 'pl-1 pr-2' : ''}`}>
           <p className={`font-bold uppercase mb-2 ${spacious ? 'text-sm' : 'text-xs'}`} style={{ color: grayColor }}>Bills</p>
-          {renderEditorTable(BILLS_DENOMINATIONS)}
+          {renderEditorTable(BILLS_DENOMINATIONS, billsSub)}
         </div>
         <div className={`min-w-0 overflow-x-auto ${spacious ? 'pl-2 pr-1' : ''}`}>
           <p className={`font-bold uppercase mb-2 ${spacious ? 'text-sm' : 'text-xs'}`} style={{ color: grayColor }}>Coins &amp; rolls</p>
-          {renderEditorTable(COINS_ROLLS_DENOMINATIONS)}
+          {renderEditorTable(COINS_ROLLS_DENOMINATIONS, coinsSub)}
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
@@ -275,13 +292,10 @@ export function CashDenominationEditor({
         </div>
       </div>
       <div className="flex flex-wrap justify-between gap-2 items-center px-3 py-2.5 rounded-lg border-2 font-black" style={{ borderColor: greenColor, color: greenColor, fontSize: '14px' }}>
-        <span>Total counted</span>
-        <span>${grand.toFixed(2)} <span className="font-normal text-gray-600">(must = ${Number(targetTotal).toFixed(2)})</span></span>
+        <span>Adjusted total (bills + coins &amp; rolls)</span>
+        <span>${grand.toFixed(2)}</span>
       </div>
-      {targetTotal != null && Math.abs(grand - Number(targetTotal)) <= 0.02 && (
-        <p className="text-sm text-green-600 font-bold">✓ Matches counted amount</p>
-      )}
-      {targetTotal != null && Math.abs(grand - Number(targetTotal)) > 0.02 && (
+      {targetTotal != null && targetTotal !== '' && Math.abs(grand - Number(targetTotal)) > 0.02 && grand > 0 && (
         <p className="text-sm text-red-600 font-bold">Must equal ${Number(targetTotal).toFixed(2)}</p>
       )}
     </div>

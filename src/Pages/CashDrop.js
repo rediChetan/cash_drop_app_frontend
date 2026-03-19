@@ -37,6 +37,7 @@ function CashDrop() {
 
   const [labelImage, setLabelImage] = useState(null);
   const [labelImageUrl, setLabelImageUrl] = useState(null); // For displaying existing images
+  const [existingImageLoadError, setExistingImageLoadError] = useState(false);
   const [cashDropDenominations, setCashDropDenominations] = useState(null);
   const [remainingCashInDrawer, setRemainingCashInDrawer] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -266,8 +267,10 @@ function CashDrop() {
         // Load existing image if present
         if (draft.label_image_url) {
           setLabelImageUrl(draft.label_image_url);
+          setExistingImageLoadError(false);
         } else {
           setLabelImageUrl(null);
+          setExistingImageLoadError(false);
         }
         setLabelImage(null); // Clear any new file selection
         
@@ -1010,18 +1013,22 @@ function CashDrop() {
                 {labelImageUrl && !labelImage && (
                   <div className="mb-4">
                     <p className="font-bold mb-2" style={{ color: COLORS.gray, fontSize: '14px' }}>Existing Image:</p>
-                    <img 
-                      src={labelImageUrl} 
-                      alt="Cash Drop Receipt" 
-                      className="w-full h-auto rounded-lg border border-gray-300 max-h-64 object-contain"
-                      onError={(e) => {
-                        console.error('Error loading image:', labelImageUrl);
-                        e.target.style.display = 'none';
-                      }}
-                    />
+                    {existingImageLoadError ? (
+                      <div className="py-6 rounded-lg border border-gray-300 bg-gray-50 text-center">
+                        <p className="font-bold text-gray-600" style={{ fontSize: '14px' }}>Image unavailable</p>
+                        <p className="text-sm text-gray-500 mt-1">The receipt image could not be loaded.</p>
+                      </div>
+                    ) : (
+                      <img 
+                        src={labelImageUrl} 
+                        alt="Cash Drop Receipt" 
+                        className="w-full h-auto rounded-lg border border-gray-300 max-h-64 object-contain"
+                        onError={() => setExistingImageLoadError(true)}
+                      />
+                    )}
                     <button
                       type="button"
-                      onClick={() => setLabelImageUrl(null)}
+                      onClick={() => { setLabelImageUrl(null); setExistingImageLoadError(false); }}
                       className="mt-2 px-3 py-1 text-white font-bold rounded transition"
                       style={{ backgroundColor: '#EF4444', fontSize: '12px' }}
                     >
@@ -1043,7 +1050,8 @@ function CashDrop() {
                     className="hidden" 
                     onChange={(e) => {
                       setLabelImage(e.target.files[0]);
-                      setLabelImageUrl(null); // Clear existing image URL when new file is selected
+                      setLabelImageUrl(null);
+                      setExistingImageLoadError(false);
                     }} 
                     accept="image/*" 
                   />

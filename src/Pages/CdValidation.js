@@ -9,6 +9,7 @@ function CashDropValidation() {
   const [dateTo, setDateTo] = useState(getPSTDate());
   const [showOnlyUnreconciled, setShowOnlyUnreconciled] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [imageLoadError, setImageLoadError] = useState(false);
   const [adminCounts, setAdminCounts] = useState({});
   const [reconciliationNotes, setReconciliationNotes] = useState({});
   const [customDenominations, setCustomDenominations] = useState({}); // { [itemId]: { hundreds, fifties, ... } } when reconciling with delta
@@ -54,17 +55,12 @@ function CashDropValidation() {
   const handleExpandRow = (item) => {
     const currentlyExpanded = expandedRows[item.id];
     if (!currentlyExpanded) {
+      // Start with empty adjusted counts (0); user fills via Counted ✓ or typing Adj. count
       setCustomDenominations(prev => ({
         ...prev,
         [item.id]: {
-          ...DENOMINATION_CONFIG.reduce((acc, d) => {
-            acc[d.name] = item[d.name] != null ? Number(item[d.name]) : 0;
-            return acc;
-          }, {}),
-          ...ROLLS_DISPLAY.reduce((acc, d) => {
-            acc[d.name] = item[d.name] != null ? Number(item[d.name]) : 0;
-            return acc;
-          }, {})
+          ...DENOMINATION_CONFIG.reduce((acc, d) => { acc[d.name] = 0; return acc; }, {}),
+          ...ROLLS_DISPLAY.reduce((acc, d) => { acc[d.name] = 0; return acc; }, {})
         }
       }));
       const allNames = [...DENOMINATION_CONFIG.map(d => d.name), ...ROLLS_DISPLAY.map(d => d.name)];
@@ -158,19 +154,13 @@ function CashDropValidation() {
       return;
     }
 
-    // For reconcile with delta: ensure row is expanded and state is initialized so user can edit in expanded section
+    // For reconcile with delta: ensure row is expanded and state is initialized (empty adjusted counts)
     if (withDelta && hasDelta && !customDenominations[item.id]) {
       setCustomDenominations(prev => ({
         ...prev,
         [item.id]: {
-          ...DENOMINATION_CONFIG.reduce((acc, d) => {
-            acc[d.name] = item[d.name] != null ? Number(item[d.name]) : 0;
-            return acc;
-          }, {}),
-          ...ROLLS_DISPLAY.reduce((acc, d) => {
-            acc[d.name] = item[d.name] != null ? Number(item[d.name]) : 0;
-            return acc;
-          }, {})
+          ...DENOMINATION_CONFIG.reduce((acc, d) => { acc[d.name] = 0; return acc; }, {}),
+          ...ROLLS_DISPLAY.reduce((acc, d) => { acc[d.name] = 0; return acc; }, {})
         }
       }));
       const allNames = [...DENOMINATION_CONFIG.map(d => d.name), ...ROLLS_DISPLAY.map(d => d.name)];
@@ -384,9 +374,8 @@ function CashDropValidation() {
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Date / Shift / Register / User</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Cash Drop</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Cash Drop Receipt Amount</th>
-                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Variance</th>
-                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Counted Amount</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Reconcile Delta</th>
+                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Counted Amount</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Action</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}></th>
               </tr>
@@ -413,7 +402,7 @@ function CashDropValidation() {
                       <td className="p-2 md:p-4">
                         {item.label_image_url ? (
                           <button 
-                            onClick={() => setSelectedImage(item.label_image_url)}
+                            onClick={() => { setSelectedImage(item.label_image_url); setImageLoadError(false); }}
                             className="font-black border-b-2 border-dotted hover:text-pink-600 transition-colors"
                             style={{ fontSize: '14px', color: COLORS.gray, borderColor: COLORS.lightPink }}
                           >
@@ -427,8 +416,8 @@ function CashDropValidation() {
                         )}
                       </td>
                       <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>${item.ws_label_amount}</td>
-                      <td className={`p-2 md:p-4 font-black ${parseFloat(item.variance) !== 0 ? 'text-red-500' : 'text-gray-300'}`} style={{ fontSize: '14px' }}>
-                        ${item.variance}
+                      <td className={`p-2 md:p-4 font-black ${(item.is_reconciled ? displayReconcileDelta !== 0 : reconcileDelta !== 0) ? 'text-red-500' : 'text-gray-300'}`} style={{ fontSize: '14px' }} title="Adjusted total − Cash drop total">
+                        {item.is_reconciled ? `$${displayReconcileDelta.toFixed(2)}` : `$${isNaN(reconcileDelta) ? '0.00' : reconcileDelta.toFixed(2)}`}
                       </td>
                       <td className="p-2 md:p-4">
                         {item.is_reconciled ? (
@@ -436,26 +425,17 @@ function CashDropValidation() {
                         ) : (
                           <div className="flex items-center bg-white border rounded px-2 py-1 w-24 md:w-32 focus-within:ring-2 ring-pink-500">
                             <span className="mr-1" style={{ color: COLORS.gray }}>$</span>
-                            <input 
+                            <input
                               type="text"
                               className="w-full font-bold outline-none"
                               style={{ fontSize: '14px' }}
                               autoComplete="off"
-                              onChange={(e) => setAdminCounts({...adminCounts, [item.id]: e.target.value})}
+                              readOnly={!!(isExpanded && customDenominations[item.id])}
+                              onChange={(e) => !(isExpanded && customDenominations[item.id]) && setAdminCounts({ ...adminCounts, [item.id]: e.target.value })}
                               value={adminCounts[item.id] || ''}
+                              title={isExpanded && customDenominations[item.id] ? 'Driven by denomination breakdown below' : ''}
                             />
                           </div>
-                        )}
-                      </td>
-                      <td className="p-2 md:p-4">
-                        {item.is_reconciled ? (
-                          <span className={`font-black ${displayReconcileDelta !== 0 ? 'text-orange-600' : 'text-gray-400'}`} style={{ fontSize: '14px' }}>
-                            ${displayReconcileDelta.toFixed(2)}
-                          </span>
-                        ) : (
-                          <span className="font-black" style={{ fontSize: '14px', color: reconcileDelta !== 0 ? COLORS.lightPink : COLORS.gray }}>
-                            ${isNaN(reconcileDelta) ? '0.00' : reconcileDelta.toFixed(2)}
-                          </span>
                         )}
                       </td>
                       <td className="p-2 md:p-4">
@@ -495,7 +475,6 @@ function CashDropValidation() {
                               disabled={Math.abs(reconcileDelta) > 0.01}
                               className="text-white font-black px-3 md:px-4 py-2 rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                               style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
-                              title={Math.abs(reconcileDelta) > 0.01 ? 'Counted amount must match drop amount' : 'Reconcile when amounts match'}
                             >
                               RECONCILE
                             </button>
@@ -530,7 +509,7 @@ function CashDropValidation() {
                     </tr>
                     {isExpanded && (
                       <tr className="bg-gray-50">
-                        <td colSpan="8" className="p-6 md:p-8 align-top">
+                        <td colSpan="7" className="p-6 md:p-8 align-top">
                           <div className="flex flex-col gap-6 md:gap-8">
                             {/* TOP: Cash drop total (full width) */}
                             <div className="min-w-0 overflow-visible">
@@ -562,6 +541,9 @@ function CashDropValidation() {
                                         [item.id]: { ...prev[item.id], [name]: val }
                                       }));
                                     }}
+                                    onTotalChange={(total) => {
+                                      setAdminCounts(prev => ({ ...prev, [item.id]: total > 0 ? String(total) : '' }));
+                                    }}
                                     targetTotal={parseFloat(adminCounts[item.id] || 0) || 0}
                                     grayColor={COLORS.gray}
                                     magentaColor={COLORS.magenta}
@@ -585,44 +567,33 @@ function CashDropValidation() {
                             {/* BOTTOM: Receipt & notes — reconciliation notes; then Notes (left) + Open label (right) */}
                             <div className="bg-white border rounded-xl p-5 shadow-sm">
                               <h4 className="font-black uppercase mb-4 tracking-widest border-b pb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Receipt &amp; notes</h4>
-                              {!item.is_reconciled && (
-                                <div className="mb-4">
-                                  <label className="block text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                    Reconciliation notes (required for delta)
-                                  </label>
-                                  <textarea
-                                    value={reconciliationNotes[item.id] || ''}
-                                    onChange={(e) => setReconciliationNotes({ ...reconciliationNotes, [item.id]: e.target.value })}
-                                    rows={3}
-                                    autoComplete="off"
-                                    className="w-full p-2 border rounded-lg resize-none focus:ring-2 focus:ring-pink-500 outline-none"
-                                    placeholder="Explain the difference between counted amount and drop amount..."
-                                    style={{ fontSize: '14px' }}
-                                  />
-                                </div>
-                              )}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="min-w-0">
-                                  <span className="text-xs font-bold uppercase" style={{ color: COLORS.gray }}>Employee Notes</span>
-                                  {item.notes ? (
-                                    <p className="mt-1 italic text-sm break-words" style={{ color: COLORS.gray }}>{item.notes}</p>
+                                  <label className="block text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                    Reconciliation notes {!item.is_reconciled && '(required for delta)'}
+                                  </label>
+                                  {!item.is_reconciled ? (
+                                    <textarea
+                                      value={reconciliationNotes[item.id] || ''}
+                                      onChange={(e) => setReconciliationNotes({ ...reconciliationNotes, [item.id]: e.target.value })}
+                                      rows={3}
+                                      autoComplete="off"
+                                      className="w-full p-2 border rounded-lg resize-none focus:ring-2 focus:ring-pink-500 outline-none"
+                                      placeholder="Explain the difference between counted amount and drop amount..."
+                                      style={{ fontSize: '14px' }}
+                                    />
+                                  ) : item.reconciliation_notes ? (
+                                    <p className="mt-1 italic text-sm break-words p-2 bg-gray-50 rounded border" style={{ color: COLORS.gray }}>{item.reconciliation_notes}</p>
                                   ) : (
-                                    <p className="mt-1 text-xs italic" style={{ color: COLORS.gray }}>No notes</p>
+                                    <p className="mt-1 text-xs italic" style={{ color: COLORS.gray }}>No reconciliation notes</p>
                                   )}
                                 </div>
-                                <div className="min-w-0 flex flex-col justify-center">
-                                  <span className="text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray }}>Label</span>
-                                  {item.label_image_url ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setSelectedImage(item.label_image_url)}
-                                      className="w-full sm:w-auto py-2.5 px-4 rounded-lg font-bold border-2 transition-colors hover:opacity-90 self-start"
-                                      style={{ borderColor: COLORS.magenta, color: COLORS.magenta, fontSize: '14px' }}
-                                    >
-                                      Open label
-                                    </button>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold uppercase" style={{ color: COLORS.gray }}>Employee notes</span>
+                                  {item.notes ? (
+                                    <p className="mt-1 italic text-sm break-words p-2 bg-gray-50 rounded border min-h-[80px]" style={{ color: COLORS.gray }}>{item.notes}</p>
                                   ) : (
-                                    <p className="text-xs italic" style={{ color: COLORS.gray }}>No receipt image</p>
+                                    <p className="mt-1 text-xs italic min-h-[80px]" style={{ color: COLORS.gray }}>No notes</p>
                                   )}
                                 </div>
                               </div>
@@ -635,7 +606,7 @@ function CashDropValidation() {
                 );
               }) : (
                 <tr>
-                  <td colSpan="8" className="p-20 text-center italic font-bold uppercase tracking-widest" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                  <td colSpan="7" className="p-20 text-center italic font-bold uppercase tracking-widest" style={{ color: COLORS.gray, fontSize: '14px' }}>
                     {loading ? "Loading Records..." : "No records found for this period"}
                   </td>
                 </tr>
@@ -650,18 +621,26 @@ function CashDropValidation() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
           <div className="relative max-w-4xl w-full bg-white rounded-lg p-2 overflow-hidden shadow-2xl">
             <button 
-              onClick={() => setSelectedImage(null)}
+              onClick={() => { setSelectedImage(null); setImageLoadError(false); }}
               className="absolute top-4 right-4 bg-red-600 text-white w-8 h-8 rounded-full font-bold flex items-center justify-center hover:bg-red-700 z-10"
             >
               ✕
             </button>
-            <div className="max-h-[80vh] overflow-y-auto">
-              <img 
-                src={selectedImage || ''} 
-                alt="Cash Drop Receipt" 
-                className="w-full h-auto"
-                onError={(e) => console.error("Image failed to load:", e.target.src)}
-              />
+            <div className="max-h-[80vh] overflow-y-auto min-h-[200px] flex items-center justify-center">
+              {imageLoadError ? (
+                <div className="p-8 text-center">
+                  <p className="font-bold text-gray-600 mb-2" style={{ fontSize: '16px' }}>Image unavailable</p>
+                  <p className="text-sm text-gray-500">The receipt image could not be loaded. It may have been moved or the connection failed.</p>
+                </div>
+              ) : (
+                <img 
+                  src={selectedImage || ''} 
+                  alt="Cash Drop Receipt" 
+                  className="w-full h-auto"
+                  onLoad={() => setImageLoadError(false)}
+                  onError={() => setImageLoadError(true)}
+                />
+              )}
             </div>
             <div className="p-4 bg-gray-50 text-center">
               <p className="font-black uppercase tracking-tighter" style={{ color: COLORS.gray, fontSize: '14px' }}>Verified Cash Drop Receipt</p>
