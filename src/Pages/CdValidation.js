@@ -44,6 +44,15 @@ function CashDropValidation() {
     { name: 'nickel_rolls', value: 2, display: 'Nickel Rolls ($2)' },
     { name: 'penny_rolls', value: 0.50, display: 'Penny Rolls ($0.50)' },
   ];
+
+  const ALL_DENOM_CHECKBOX_NAMES = [...DENOMINATION_CONFIG.map((d) => d.name), ...ROLLS_DISPLAY.map((d) => d.name)];
+
+  /** Reconcile is allowed only when every ✓ in the expanded denomination editor is ticked for this row. */
+  const allDenomCheckboxesTicked = (itemId) => {
+    const checks = countedCheckedByItem[itemId];
+    if (!checks || typeof checks !== 'object') return false;
+    return ALL_DENOM_CHECKBOX_NAMES.every((name) => checks[name] === true);
+  };
   
   const toggleRow = (itemId) => {
     setExpandedRows(prev => ({
@@ -55,18 +64,17 @@ function CashDropValidation() {
   const handleExpandRow = (item) => {
     const currentlyExpanded = expandedRows[item.id];
     if (!currentlyExpanded) {
-      // Start with empty adjusted counts (0); user fills via Counted ✓ or typing Adj. count
+      // Start with null = unset adjusted count; ✓ empty → cash drop count; ✓ with value → keep value
       setCustomDenominations(prev => ({
         ...prev,
         [item.id]: {
-          ...DENOMINATION_CONFIG.reduce((acc, d) => { acc[d.name] = 0; return acc; }, {}),
-          ...ROLLS_DISPLAY.reduce((acc, d) => { acc[d.name] = 0; return acc; }, {})
+          ...DENOMINATION_CONFIG.reduce((acc, d) => { acc[d.name] = null; return acc; }, {}),
+          ...ROLLS_DISPLAY.reduce((acc, d) => { acc[d.name] = null; return acc; }, {})
         }
       }));
-      const allNames = [...DENOMINATION_CONFIG.map(d => d.name), ...ROLLS_DISPLAY.map(d => d.name)];
       setCountedCheckedByItem(prev => ({
         ...prev,
-        [item.id]: Object.fromEntries(allNames.map(n => [n, false]))
+        [item.id]: Object.fromEntries(ALL_DENOM_CHECKBOX_NAMES.map((n) => [n, false]))
       }));
     }
     toggleRow(item.id);
@@ -130,12 +138,25 @@ function CashDropValidation() {
   const getCustomDenomSum = (itemId) => {
     const denoms = customDenominations[itemId];
     if (!denoms) return 0;
-    const denomSum = DENOMINATION_CONFIG.reduce((sum, d) => sum + (parseFloat(denoms[d.name]) || 0) * d.value, 0);
-    const rollsSum = ROLLS_DISPLAY.reduce((sum, d) => sum + (parseFloat(denoms[d.name]) || 0) * d.value, 0);
+    const denomSum = DENOMINATION_CONFIG.reduce((sum, d) => {
+      const v = denoms[d.name];
+      const c = v == null ? 0 : (parseFloat(v) || 0);
+      return sum + c * d.value;
+    }, 0);
+    const rollsSum = ROLLS_DISPLAY.reduce((sum, d) => {
+      const v = denoms[d.name];
+      const c = v == null ? 0 : (parseFloat(v) || 0);
+      return sum + c * d.value;
+    }, 0);
     return Math.round((denomSum + rollsSum) * 100) / 100;
   };
 
   const handleReconcile = async (item, withDelta = false) => {
+    if (!allDenomCheckboxesTicked(item.id)) {
+      showStatusMessage(item.id, 'Tick every denomination checkbox (✓) in the expanded breakdown before reconciling.', 'error');
+      return;
+    }
+
     const count = adminCounts[item.id];
     
     if (!count || count === '') {
@@ -159,14 +180,13 @@ function CashDropValidation() {
       setCustomDenominations(prev => ({
         ...prev,
         [item.id]: {
-          ...DENOMINATION_CONFIG.reduce((acc, d) => { acc[d.name] = 0; return acc; }, {}),
-          ...ROLLS_DISPLAY.reduce((acc, d) => { acc[d.name] = 0; return acc; }, {})
+          ...DENOMINATION_CONFIG.reduce((acc, d) => { acc[d.name] = null; return acc; }, {}),
+          ...ROLLS_DISPLAY.reduce((acc, d) => { acc[d.name] = null; return acc; }, {})
         }
       }));
-      const allNames = [...DENOMINATION_CONFIG.map(d => d.name), ...ROLLS_DISPLAY.map(d => d.name)];
       setCountedCheckedByItem(prev => ({
         ...prev,
-        [item.id]: Object.fromEntries(allNames.map(n => [n, false]))
+        [item.id]: Object.fromEntries(ALL_DENOM_CHECKBOX_NAMES.map((n) => [n, false]))
       }));
       setExpandedRows(prev => ({ ...prev, [item.id]: true }));
       showStatusMessage(item.id, 'Expand the row (+) to adjust denominations and add notes, then click Reconcile with Delta again.', 'info');
@@ -202,11 +222,11 @@ function CashDropValidation() {
     if (withDelta && hasDelta && customDenominations[item.id]) {
       DENOMINATION_CONFIG.forEach(d => {
         const v = customDenominations[item.id][d.name];
-        requestBody[d.name] = typeof v === 'number' ? v : (parseFloat(v) || 0);
+        requestBody[d.name] = v == null ? 0 : (typeof v === 'number' ? v : (parseFloat(v) || 0));
       });
       ROLLS_DISPLAY.forEach(d => {
         const v = customDenominations[item.id][d.name];
-        requestBody[d.name] = typeof v === 'number' ? v : (parseFloat(v) || 0);
+        requestBody[d.name] = v == null ? 0 : (typeof v === 'number' ? v : (parseFloat(v) || 0));
       });
     }
 
@@ -391,6 +411,14 @@ function CashDropValidation() {
                 const itemReconcileDelta = item.reconcile_delta != null ? parseFloat(item.reconcile_delta) : 0;
                 const displayReconcileDelta = isNaN(itemReconcileDelta) ? 0 : itemReconcileDelta;
                 const isExpanded = expandedRows[item.id];
+                const rawCounted = adminCounts[item.id];
+                const parsedCounted = parseFloat(rawCounted);
+                const countedIsEmptyOrZero =
+                  rawCounted === '' ||
+                  rawCounted === undefined ||
+                  rawCounted === null ||
+                  (Number.isFinite(parsedCounted) && parsedCounted === 0);
+                const showValidateCountBtn = !item.is_reconciled && !isExpanded && countedIsEmptyOrZero;
                 
                 return (
                   <React.Fragment key={item.id}>
@@ -422,6 +450,15 @@ function CashDropValidation() {
                       <td className="p-2 md:p-4">
                         {item.is_reconciled ? (
                           <span className="font-black" style={{ fontSize: '14px', color: COLORS.yellowGreen }}>${item.admin_count_amount}</span>
+                        ) : showValidateCountBtn ? (
+                          <button
+                            type="button"
+                            onClick={() => handleExpandRow(item)}
+                            className="text-white font-black px-3 py-2 rounded-lg shadow-md transition-all active:scale-95 whitespace-nowrap"
+                            style={{ backgroundColor: COLORS.magenta, fontSize: '12px' }}
+                          >
+                            VALIDATE COUNT
+                          </button>
                         ) : (
                           <div className="flex items-center bg-white border rounded px-2 py-1 w-24 md:w-32 focus-within:ring-2 ring-pink-500">
                             <span className="mr-1" style={{ color: COLORS.gray }}>$</span>
@@ -472,7 +509,8 @@ function CashDropValidation() {
                           <div className="flex flex-col gap-2">
                             <button 
                               onClick={() => handleReconcile(item, false)}
-                              disabled={Math.abs(reconcileDelta) > 0.01}
+                              disabled={!allDenomCheckboxesTicked(item.id) || Math.abs(reconcileDelta) > 0.01}
+                              title={!allDenomCheckboxesTicked(item.id) ? 'Expand the row and tick every denomination ✓ first' : undefined}
                               className="text-white font-black px-3 md:px-4 py-2 rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                               style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
                             >
@@ -480,7 +518,9 @@ function CashDropValidation() {
                             </button>
                             <button 
                               onClick={() => handleReconcile(item, true)}
-                              className="text-white font-black px-3 md:px-4 py-2 rounded-lg shadow-md transition-all active:scale-95"
+                              disabled={!allDenomCheckboxesTicked(item.id)}
+                              title={!allDenomCheckboxesTicked(item.id) ? 'Expand the row and tick every denomination ✓ first' : undefined}
+                              className="text-white font-black px-3 md:px-4 py-2 rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                               style={{ backgroundColor: COLORS.yellowGreen, fontSize: '14px' }}
                             >
                               RECONCILE WITH DELTA

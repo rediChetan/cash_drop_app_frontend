@@ -895,9 +895,6 @@ const BankDrop = () => {
                                   magentaColor={COLORS.magenta}
                                   singleColumn
                                 />
-                                <p className="text-xs mt-3 font-bold" style={{ color: COLORS.yellowGreen }}>
-                                  Total: ${(batchDenomCache[row.batch_number].total_amount ?? 0).toFixed(2)}
-                                </p>
                               </div>
                             ) : null}
                           </td>
