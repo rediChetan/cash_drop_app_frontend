@@ -243,6 +243,10 @@ function CashDropValidation() {
   };
 
   const handleUnreconcileClick = (item) => {
+    if (item.bank_dropped) {
+      showStatusMessage(item.id, 'Cannot unreconcile: this cash drop has been bank dropped.', 'error');
+      return;
+    }
     setUnreconcileModal({ show: true, item });
   };
 
@@ -250,6 +254,12 @@ function CashDropValidation() {
     if (!unreconcileModal.item) return;
 
     const item = unreconcileModal.item;
+    if (item.bank_dropped) {
+      showStatusMessage(item.id, 'Cannot unreconcile: this cash drop has been bank dropped.', 'error');
+      setUnreconcileModal({ show: false, item: null });
+      return;
+    }
+
     setUnreconcileModal({ show: false, item: null });
 
     const response = await fetch(API_ENDPOINTS.CASH_DROP_RECONCILER, {
@@ -475,9 +485,17 @@ function CashDropValidation() {
                                 <p className="text-xs italic" style={{ color: COLORS.gray, fontSize: '14px' }}>{item.reconciliation_notes}</p>
                               </div>
                             )}
+                            {item.bank_dropped && (
+                              <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5" style={{ fontSize: '12px' }}>
+                                Bank dropped — unreconcile is not allowed.
+                              </p>
+                            )}
                             <button 
+                              type="button"
                               onClick={() => handleUnreconcileClick(item)}
-                              className="text-white font-black px-2 md:px-3 py-1.5 rounded-lg shadow-md transition-all active:scale-95"
+                              disabled={!!item.bank_dropped}
+                              title={item.bank_dropped ? 'Cannot unreconcile after bank drop' : undefined}
+                              className="text-white font-black px-2 md:px-3 py-1.5 rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                               style={{ backgroundColor: COLORS.gray, fontSize: '14px' }}
                             >
                               UNRECONCILE
@@ -714,8 +732,10 @@ function CashDropValidation() {
               {/* Buttons */}
               <div className="flex flex-col md:flex-row gap-3">
                 <button
+                  type="button"
                   onClick={handleUnreconcileConfirm}
-                  className="flex-1 text-white font-black px-4 py-3 rounded-lg shadow-md transition-all active:scale-95 uppercase tracking-widest"
+                  disabled={!!unreconcileModal.item?.bank_dropped}
+                  className="flex-1 text-white font-black px-4 py-3 rounded-lg shadow-md transition-all active:scale-95 uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
                 >
                   Confirm
