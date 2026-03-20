@@ -27,9 +27,8 @@ function Header({ sessionValid = true }) {
         const refreshToken = sessionStorage.getItem('refresh_token');
         const accessToken = sessionStorage.getItem('access_token');
         if (!refreshToken || !accessToken) {
-            showStatusMessage("No valid tokens found. Please log in again.", 'error');
             sessionStorage.clear();
-            navigate('/login');
+            navigate('/login', { replace: true });
             return;
         }
         try {
@@ -43,13 +42,26 @@ function Header({ sessionValid = true }) {
             });
             if (response.ok) {
                 sessionStorage.clear();
-                navigate('/login');
+                navigate('/login', { replace: true });
                 showStatusMessage("Logout Successful", 'success');
             } else {
+                // Token may already be expired/invalid; log out locally without showing noisy errors.
+                if (response.status === 401 || response.status === 403) {
+                    sessionStorage.clear();
+                    navigate('/login', { replace: true });
+                    return;
+                }
                 sessionStorage.clear();
-                const errorData = await response.json();
-                console.error("Logout failed:", response.status, errorData);
-                showStatusMessage(`Logout Failed: ${errorData.detail || response.statusText}`, 'error');
+                let errorMessage = response.statusText || 'Logout failed';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData?.detail || errorMessage;
+                    console.error("Logout failed:", response.status, errorData);
+                } catch {
+                    console.error("Logout failed:", response.status);
+                }
+                showStatusMessage(`Logout Failed: ${errorMessage}`, 'error');
+                navigate('/login', { replace: true });
             }
         } catch (error) {
             console.error("Error during logout:", error);

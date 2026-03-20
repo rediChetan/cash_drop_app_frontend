@@ -934,7 +934,7 @@ const BankDrop = () => {
             <div className="mb-6 overflow-x-auto">
               <CashDenominationDisplay
                 record={totalsObjectToRecord(summaryData.totals)}
-                title="Denomination totals (bills | coins & rolls)"
+                title=""
                 grayColor={COLORS.gray}
                 magentaColor={COLORS.yellowGreen}
               />

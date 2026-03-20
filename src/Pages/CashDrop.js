@@ -43,7 +43,13 @@ function CashDrop() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState({ show: false, text: '', type: 'info' });
-  const [adminSettings, setAdminSettings] = useState({ shifts: [], workstations: [], starting_amount: 200.00, max_cash_drops_per_day: 10 });
+  const [adminSettings, setAdminSettings] = useState({
+    shifts: [],
+    workstations: [],
+    starting_amount: 200.00,
+    max_cash_drops_per_day: 10,
+    cash_drop_receipt_image_required: false
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftId, setDraftId] = useState(null);
   const [draftDrawerId, setDraftDrawerId] = useState(null);
@@ -416,7 +422,9 @@ function CashDrop() {
   const isSubmitValid = () => {
     const drop = parseFloat(calculateDropAmount());
     const mathCheck = Math.abs(drop - (parseFloat(calculateTotalCash()) - parseFloat(formData.startingCash))) < 0.01;
-    return mathCheck && drop > 0 && formData.workStation;
+    const hasReceiptImage = !!(labelImage || labelImageUrl);
+    const imageOk = !adminSettings.cash_drop_receipt_image_required || hasReceiptImage;
+    return mathCheck && drop > 0 && formData.workStation && imageOk;
   };
 
   // Whether selected date is allowed for cash drop (from calendar API)
@@ -600,6 +608,10 @@ function CashDrop() {
   const handleSubmit = async () => {
     if (isSelectedDateAllowed === false) {
       showStatusMessage('Cash drop is not allowed for this date (check admin settings).', 'error');
+      return;
+    }
+    if (adminSettings.cash_drop_receipt_image_required && !labelImage && !labelImageUrl) {
+      showStatusMessage('A cash drop receipt image is required. Please upload an image before submitting.', 'error');
       return;
     }
     const token = sessionStorage.getItem('access_token');
@@ -1009,7 +1021,9 @@ function CashDrop() {
             {/* Image & Submit Column */}
             <div className="space-y-4 md:space-y-6">
               <div className="bg-white border rounded-lg p-4 md:p-6">
-                <h3 className="font-black uppercase mb-4 md:mb-6 tracking-widest border-b pb-2" style={{ fontSize: '18px', color: COLORS.gray }}>3. Cash Drop Receipt (Optional)</h3>
+                <h3 className="font-black uppercase mb-4 md:mb-6 tracking-widest border-b pb-2" style={{ fontSize: '18px', color: COLORS.gray }}>
+                  3. Cash Drop Receipt {adminSettings.cash_drop_receipt_image_required ? '(Required)' : '(Optional)'}
+                </h3>
                 {labelImageUrl && !labelImage && (
                   <div className="mb-4">
                     <p className="font-bold mb-2" style={{ color: COLORS.gray, fontSize: '14px' }}>Existing Image:</p>
@@ -1039,7 +1053,11 @@ function CashDrop() {
                 <label className={`group flex flex-col items-center justify-center w-full h-32 md:h-40 border-2 border-dashed rounded-lg cursor-pointer transition-all ${(labelImage || labelImageUrl) ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-pink-500'}`}>
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <p className="font-bold" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                      {(labelImage || labelImageUrl) ? "✅ Image Ready" : "Upload Cash Drop Receipt (Optional)"}
+                      {(labelImage || labelImageUrl)
+                        ? '✅ Image Ready'
+                        : adminSettings.cash_drop_receipt_image_required
+                          ? 'Upload Cash Drop Receipt (Required)'
+                          : 'Upload Cash Drop Receipt (Optional)'}
                     </p>
                     <p className="mt-1" style={{ color: COLORS.gray, fontSize: '14px' }}>
                       {labelImage ? labelImage.name : (labelImageUrl ? "Existing image loaded" : "PNG, JPG or JPEG")}

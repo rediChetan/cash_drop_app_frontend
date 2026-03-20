@@ -91,14 +91,16 @@ export function CashDenominationDisplay({
 
   return (
     <div className={`space-y-3 ${className}`}>
-      <h4 className="font-black uppercase tracking-widest border-b pb-2" style={{ fontSize: spacious ? '16px' : '14px', color: grayColor }}>
-        {title}
-      </h4>
+      {title ? (
+        <h4 className="font-black uppercase tracking-widest border-b pb-2" style={{ fontSize: spacious ? '16px' : '14px', color: grayColor }}>
+          {title}
+        </h4>
+      ) : null}
       <div className={`grid ${singleColumn ? 'grid-cols-1 gap-4' : `grid-cols-1 lg:grid-cols-2 ${spacious ? 'gap-6 lg:gap-8' : 'gap-4'}`}`}>
         <div className="min-w-0 overflow-x-auto space-y-2">
           <p className="text-xs font-bold uppercase mb-2" style={{ color: grayColor }}>Bills</p>
           {renderTable(BILLS_DENOMINATIONS)}
-          <div className="flex justify-between items-center px-3 py-2.5 bg-gray-50 rounded-lg border text-sm font-bold" style={{ color: magentaColor }}>
+          <div className="flex w-fit ml-auto items-center justify-end gap-2 py-1 text-sm font-bold" style={{ color: magentaColor }}>
             <span>Sub Total</span>
             <span>${billsSub.toFixed(2)}</span>
           </div>
@@ -106,13 +108,13 @@ export function CashDenominationDisplay({
         <div className="min-w-0 overflow-x-auto space-y-2">
           <p className="text-xs font-bold uppercase mb-2" style={{ color: grayColor }}>Coins &amp; rolls</p>
           {renderTable(COINS_ROLLS_DENOMINATIONS)}
-          <div className="flex justify-between items-center px-3 py-2.5 bg-gray-50 rounded-lg border text-sm font-bold" style={{ color: magentaColor }}>
+          <div className="flex w-fit ml-auto items-center justify-end gap-2 py-1 text-sm font-bold" style={{ color: magentaColor }}>
             <span>Sub Total</span>
             <span>${coinsSub.toFixed(2)}</span>
           </div>
         </div>
       </div>
-      <div className="flex justify-between items-center px-3 py-2.5 rounded-lg border-2 font-black" style={{ borderColor: magentaColor, color: magentaColor, fontSize: '15px' }}>
+      <div className="flex items-center justify-end gap-2 px-3 py-2.5 bg-gray-50 rounded-lg border text-sm font-bold" style={{ borderColor: magentaColor, color: magentaColor, fontSize: '15px' }}>
         <span>Grand Total</span>
         <span>${grand.toFixed(2)}</span>
       </div>
@@ -178,6 +180,9 @@ export function CashDenominationEditor({
   sectionTitle = 'Cash drop total',
   helpText = 'Tick ✓ to confirm each line: if Adj. count is empty, it fills with the cash drop count; if you already entered an Adj. count, ✓ keeps that value. Total below syncs to Counted Amount.',
   spacious = false,
+  /** Caps width on large screens so columns stay compact; use `max-w-full` to disable. */
+  maxWidthClass = 'max-w-7xl',
+  className = '',
 }) {
   const record = values || {};
   const sys = systemRecord || {};
@@ -217,7 +222,7 @@ export function CashDenominationEditor({
 
   const renderEditorTable = (denoms) => (
     <table
-      className={`w-full border border-gray-200 rounded-lg overflow-hidden bg-white ${spacious ? 'text-sm' : 'text-xs md:text-sm min-w-0'}`}
+      className={`w-full max-w-full border border-gray-200 rounded-lg overflow-hidden bg-white ${spacious ? 'text-sm' : 'text-xs md:text-sm min-w-0'}`}
       style={spacious ? { minWidth: '320px' } : undefined}
     >
       <thead>
@@ -277,14 +282,14 @@ export function CashDenominationEditor({
   );
 
   return (
-    <div className="space-y-3 overflow-x-auto">
+    <div className={`w-full mx-auto min-w-0 space-y-3 overflow-x-auto ${maxWidthClass} ${className}`.trim()}>
       <h4 className="font-black uppercase tracking-widest border-b pb-2" style={{ fontSize: spacious ? '16px' : '14px', color: magentaColor }}>
         {sectionTitle}
       </h4>
       <p className={spacious ? 'text-sm' : 'text-xs'} style={{ color: grayColor }}>
         {helpText}
       </p>
-      <div className={`grid grid-cols-1 xl:grid-cols-2 ${spacious ? 'gap-8 xl:gap-12' : 'gap-4'}`}>
+      <div className={`grid grid-cols-1 xl:grid-cols-2 ${spacious ? 'gap-6 xl:gap-8' : 'gap-4'}`}>
         <div className={`min-w-0 overflow-x-auto ${spacious ? 'pl-1 pr-2' : ''}`}>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <p className={`font-bold uppercase ${spacious ? 'text-sm' : 'text-xs'}`} style={{ color: grayColor }}>Bills</p>
@@ -315,22 +320,19 @@ export function CashDenominationEditor({
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
-        <div className="flex justify-between items-center px-3 py-2.5 bg-green-50 rounded-lg border text-sm font-bold" style={{ color: greenColor }}>
-          <span>Sub Total (bills)</span>
+        <div className="flex w-fit ml-auto items-center justify-end gap-2 py-1 text-sm font-bold" style={{ color: magentaColor }}>
+          <span>Sub Total</span>
           <span>${billsSub.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between items-center px-3 py-2.5 bg-green-50 rounded-lg border text-sm font-bold" style={{ color: greenColor }}>
-          <span>Sub Total (coins &amp; rolls)</span>
+        <div className="flex w-fit ml-auto items-center justify-end gap-2 py-1 text-sm font-bold" style={{ color: magentaColor }}>
+          <span>Sub Total</span>
           <span>${coinsSub.toFixed(2)}</span>
         </div>
       </div>
-      <div className="flex flex-wrap justify-between gap-2 items-center px-3 py-2.5 rounded-lg border-2 font-black" style={{ borderColor: greenColor, color: greenColor, fontSize: '14px' }}>
-        <span>Adjusted total (bills + coins &amp; rolls)</span>
+      <div className="flex items-center justify-end gap-2 px-3 py-2.5 bg-gray-50 rounded-lg border text-sm font-bold" style={{ borderColor: magentaColor, color: magentaColor, fontSize: '14px' }}>
+        <span>Adjusted total (Bills + Coins & Rolls)</span>
         <span>${grand.toFixed(2)}</span>
       </div>
-      {targetTotal != null && targetTotal !== '' && Math.abs(grand - Number(targetTotal)) > 0.02 && grand > 0 && (
-        <p className="text-sm text-red-600 font-bold">Must equal ${Number(targetTotal).toFixed(2)}</p>
-      )}
     </div>
   );
 }

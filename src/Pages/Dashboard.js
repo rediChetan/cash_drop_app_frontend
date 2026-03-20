@@ -120,14 +120,16 @@ const Dashboard = () => {
         workstations: [],
         starting_amount: 200.00,
         max_cash_drops_per_day: 10,
-        cash_drop_date_range: 'last_2_days'
+        cash_drop_date_range: 'last_2_days',
+        cash_drop_receipt_image_required: false
     });
     const [originalSettings, setOriginalSettings] = useState({
         shifts: [],
         workstations: [],
         starting_amount: 200.00,
         max_cash_drops_per_day: 10,
-        cash_drop_date_range: 'last_2_days'
+        cash_drop_date_range: 'last_2_days',
+        cash_drop_receipt_image_required: false
     });
     const [newShift, setNewShift] = useState('');
     const [newWorkstation, setNewWorkstation] = useState('');
@@ -664,6 +666,23 @@ const Dashboard = () => {
                                 >
                                     <option value="last_2_days">Last 2 days (today + yesterday)</option>
                                     <option value="all_previous">All previous days</option>
+                                </select>
+                            </div>
+
+                            {/* Receipt image required vs optional */}
+                            <div>
+                                <label className="block font-bold mb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Cash drop receipt image</label>
+                                <select
+                                    value={settings.cash_drop_receipt_image_required ? 'required' : 'optional'}
+                                    onChange={(e) => setSettings(prev => ({
+                                        ...prev,
+                                        cash_drop_receipt_image_required: e.target.value === 'required'
+                                    }))}
+                                    className="w-full p-2 border rounded"
+                                    style={{ fontSize: '14px' }}
+                                >
+                                    <option value="optional">Optional (users may submit without an image)</option>
+                                    <option value="required">Required (users must upload before submit)</option>
                                 </select>
                             </div>
                         </div>

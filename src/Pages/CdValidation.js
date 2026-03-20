@@ -12,7 +12,7 @@ function CashDropValidation() {
   const [imageLoadError, setImageLoadError] = useState(false);
   const [adminCounts, setAdminCounts] = useState({});
   const [reconciliationNotes, setReconciliationNotes] = useState({});
-  const [customDenominations, setCustomDenominations] = useState({}); // { [itemId]: { hundreds, fifties, ... } } when reconciling with delta
+  const [customDenominations, setCustomDenominations] = useState({}); // { [itemId]: { hundreds, fifties, ... } } after row expand (required when there is a delta)
   const [countedCheckedByItem, setCountedCheckedByItem] = useState({}); // per-denom checkbox after physical count
   const [loading, setLoading] = useState(false);
   const [statusMessages, setStatusMessages] = useState({});
@@ -151,7 +151,7 @@ function CashDropValidation() {
     return Math.round((denomSum + rollsSum) * 100) / 100;
   };
 
-  const handleReconcile = async (item, withDelta = false) => {
+  const handleReconcile = async (item) => {
     if (!allDenomCheckboxesTicked(item.id)) {
       showStatusMessage(item.id, 'Tick every denomination checkbox (✓) in the expanded breakdown before reconciling.', 'error');
       return;
@@ -169,38 +169,17 @@ function CashDropValidation() {
     const reconcileDelta = countedAmount - cashDropAmount;
     const hasDelta = Math.abs(reconcileDelta) > 0.01;
 
-    // For regular reconcile, amounts must match
-    if (!withDelta && hasDelta) {
-      showStatusMessage(item.id, 'Counted amount must match drop amount for reconciliation. Use "Reconcile with Delta" if amounts differ.', 'error');
+    if (hasDelta && !customDenominations[item.id]) {
+      showStatusMessage(item.id, 'Expand the row (+) to enter the denomination breakdown, then reconcile.', 'error');
       return;
     }
 
-    // For reconcile with delta: ensure row is expanded and state is initialized (empty adjusted counts)
-    if (withDelta && hasDelta && !customDenominations[item.id]) {
-      setCustomDenominations(prev => ({
-        ...prev,
-        [item.id]: {
-          ...DENOMINATION_CONFIG.reduce((acc, d) => { acc[d.name] = null; return acc; }, {}),
-          ...ROLLS_DISPLAY.reduce((acc, d) => { acc[d.name] = null; return acc; }, {})
-        }
-      }));
-      setCountedCheckedByItem(prev => ({
-        ...prev,
-        [item.id]: Object.fromEntries(ALL_DENOM_CHECKBOX_NAMES.map((n) => [n, false]))
-      }));
-      setExpandedRows(prev => ({ ...prev, [item.id]: true }));
-      showStatusMessage(item.id, 'Expand the row (+) to adjust denominations and add notes, then click Reconcile with Delta again.', 'info');
+    if (hasDelta && (!reconciliationNotes[item.id] || reconciliationNotes[item.id].trim() === '')) {
+      showStatusMessage(item.id, 'Please add reconciliation notes explaining the difference before reconciling.', 'error');
       return;
     }
 
-    // Notes required for delta reconciliation (entered in expanded section)
-    if (withDelta && (!reconciliationNotes[item.id] || reconciliationNotes[item.id].trim() === '')) {
-      showStatusMessage(item.id, 'Please add notes explaining the delta before reconciling', 'error');
-      return;
-    }
-
-    // When there is a delta, require custom denominations to total the counted amount
-    if (withDelta && hasDelta) {
+    if (hasDelta) {
       const customSum = getCustomDenomSum(item.id);
       if (Math.abs(customSum - countedAmount) > 0.02) {
         showStatusMessage(item.id, `Custom denominations must total the counted amount ($${countedAmount.toFixed(2)}). Current total: $${customSum.toFixed(2)}`, 'error');
@@ -215,11 +194,11 @@ function CashDropValidation() {
       is_reconciled: true
     };
 
-    if (withDelta && reconciliationNotes[item.id]) {
-      requestBody.notes = reconciliationNotes[item.id];
+    if (hasDelta && reconciliationNotes[item.id]?.trim()) {
+      requestBody.notes = reconciliationNotes[item.id].trim();
     }
 
-    if (withDelta && hasDelta && customDenominations[item.id]) {
+    if (customDenominations[item.id]) {
       DENOMINATION_CONFIG.forEach(d => {
         const v = customDenominations[item.id][d.name];
         requestBody[d.name] = v == null ? 0 : (typeof v === 'number' ? v : (parseFloat(v) || 0));
@@ -419,6 +398,14 @@ function CashDropValidation() {
                   rawCounted === null ||
                   (Number.isFinite(parsedCounted) && parsedCounted === 0);
                 const showValidateCountBtn = !item.is_reconciled && !isExpanded && countedIsEmptyOrZero;
+                const reconciliationNotesTrim = (reconciliationNotes[item.id] || '').trim();
+                const reconcileNotesRequired = hasDelta && !reconciliationNotesTrim;
+                const reconcileButtonDisabled = !allDenomCheckboxesTicked(item.id) || reconcileNotesRequired;
+                const reconcileButtonTitle = !allDenomCheckboxesTicked(item.id)
+                  ? 'Expand the row and tick every denomination ✓ first'
+                  : reconcileNotesRequired
+                    ? 'Counted amount differs from cash drop — add reconciliation notes first'
+                    : undefined;
                 
                 return (
                   <React.Fragment key={item.id}>
@@ -508,22 +495,13 @@ function CashDropValidation() {
                         ) : (
                           <div className="flex flex-col gap-2">
                             <button 
-                              onClick={() => handleReconcile(item, false)}
-                              disabled={!allDenomCheckboxesTicked(item.id) || Math.abs(reconcileDelta) > 0.01}
-                              title={!allDenomCheckboxesTicked(item.id) ? 'Expand the row and tick every denomination ✓ first' : undefined}
+                              onClick={() => handleReconcile(item)}
+                              disabled={reconcileButtonDisabled}
+                              title={reconcileButtonTitle}
                               className="text-white font-black px-3 md:px-4 py-2 rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                               style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
                             >
                               RECONCILE
-                            </button>
-                            <button 
-                              onClick={() => handleReconcile(item, true)}
-                              disabled={!allDenomCheckboxesTicked(item.id)}
-                              title={!allDenomCheckboxesTicked(item.id) ? 'Expand the row and tick every denomination ✓ first' : undefined}
-                              className="text-white font-black px-3 md:px-4 py-2 rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                              style={{ backgroundColor: COLORS.yellowGreen, fontSize: '14px' }}
-                            >
-                              RECONCILE WITH DELTA
                             </button>
                             {statusMessages[item.id] && statusMessages[item.id].show && (
                               <div className={`p-2 rounded ${
@@ -550,9 +528,48 @@ function CashDropValidation() {
                     {isExpanded && (
                       <tr className="bg-gray-50">
                         <td colSpan="7" className="p-6 md:p-8 align-top">
-                          <div className="flex flex-col gap-6 md:gap-8">
-                            {/* TOP: Cash drop total (full width) */}
-                            <div className="min-w-0 overflow-visible">
+                          <div className="w-full max-w-7xl mx-auto min-w-0 flex flex-col gap-6 md:gap-8">
+                            {/* TOP: Receipt & notes — same max width as cash editor below */}
+                            <div className="bg-white border rounded-xl p-5 shadow-sm w-full">
+                              <h4 className="font-black uppercase mb-4 tracking-widest border-b pb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Notes</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="min-w-0">
+                                  <label className="block text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>
+                                    Reconciliation notes{' '}
+                                    {!item.is_reconciled && (
+                                      hasDelta
+                                        ? '(counted amount differs from cash drop)'
+                                        : '(optional)'
+                                    )}
+                                  </label>
+                                  {!item.is_reconciled ? (
+                                    <textarea
+                                      value={reconciliationNotes[item.id] || ''}
+                                      onChange={(e) => setReconciliationNotes({ ...reconciliationNotes, [item.id]: e.target.value })}
+                                      rows={3}
+                                      autoComplete="off"
+                                      className="w-full p-2 border rounded-lg resize-none focus:ring-2 focus:ring-pink-500 outline-none"
+                                      placeholder={hasDelta ? 'Explain the difference between counted amount and cash drop…' : 'Optional — add a note if needed…'}
+                                      style={{ fontSize: '14px' }}
+                                    />
+                                  ) : item.reconciliation_notes ? (
+                                    <p className="mt-1 italic text-sm break-words p-2 bg-gray-50 rounded border" style={{ color: COLORS.gray }}>{item.reconciliation_notes}</p>
+                                  ) : (
+                                    <p className="mt-1 text-xs italic" style={{ color: COLORS.gray }}>No reconciliation notes</p>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold uppercase" style={{ color: COLORS.gray }}>Employee notes</span>
+                                  {item.notes ? (
+                                    <p className="mt-1 italic text-sm break-words p-2 bg-gray-50 rounded border min-h-[80px]" style={{ color: COLORS.gray }}>{item.notes}</p>
+                                  ) : (
+                                    <p className="mt-1 text-xs italic min-h-[80px]" style={{ color: COLORS.gray }}>No notes</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {/* BOTTOM: Cash drop total (same max width as Notes) */}
+                            <div className="w-full min-w-0 overflow-visible">
                               {item.is_reconciled ? (
                                 <div className="bg-white border rounded-xl p-6 md:p-8 shadow-sm overflow-visible">
                                   <CashDenominationDisplay
@@ -590,6 +607,7 @@ function CashDropValidation() {
                                     greenColor={COLORS.yellowGreen}
                                     sectionTitle="Cash drop total"
                                     spacious
+                                    maxWidthClass="max-w-full"
                                   />
                                 </div>
                               ) : (
@@ -603,40 +621,6 @@ function CashDropValidation() {
                                   />
                                 </div>
                               )}
-                            </div>
-                            {/* BOTTOM: Receipt & notes — reconciliation notes; then Notes (left) + Open label (right) */}
-                            <div className="bg-white border rounded-xl p-5 shadow-sm">
-                              <h4 className="font-black uppercase mb-4 tracking-widest border-b pb-2" style={{ fontSize: '14px', color: COLORS.gray }}>Receipt &amp; notes</h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="min-w-0">
-                                  <label className="block text-xs font-bold uppercase mb-1" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                    Reconciliation notes {!item.is_reconciled && '(required for delta)'}
-                                  </label>
-                                  {!item.is_reconciled ? (
-                                    <textarea
-                                      value={reconciliationNotes[item.id] || ''}
-                                      onChange={(e) => setReconciliationNotes({ ...reconciliationNotes, [item.id]: e.target.value })}
-                                      rows={3}
-                                      autoComplete="off"
-                                      className="w-full p-2 border rounded-lg resize-none focus:ring-2 focus:ring-pink-500 outline-none"
-                                      placeholder="Explain the difference between counted amount and drop amount..."
-                                      style={{ fontSize: '14px' }}
-                                    />
-                                  ) : item.reconciliation_notes ? (
-                                    <p className="mt-1 italic text-sm break-words p-2 bg-gray-50 rounded border" style={{ color: COLORS.gray }}>{item.reconciliation_notes}</p>
-                                  ) : (
-                                    <p className="mt-1 text-xs italic" style={{ color: COLORS.gray }}>No reconciliation notes</p>
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <span className="text-xs font-bold uppercase" style={{ color: COLORS.gray }}>Employee notes</span>
-                                  {item.notes ? (
-                                    <p className="mt-1 italic text-sm break-words p-2 bg-gray-50 rounded border min-h-[80px]" style={{ color: COLORS.gray }}>{item.notes}</p>
-                                  ) : (
-                                    <p className="mt-1 text-xs italic min-h-[80px]" style={{ color: COLORS.gray }}>No notes</p>
-                                  )}
-                                </div>
-                              </div>
                             </div>
                           </div>
                         </td>
