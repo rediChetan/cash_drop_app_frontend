@@ -9,6 +9,7 @@ import CdDashboard from './Pages/CdDashboard.js';
 import Dashboard from './Pages/Dashboard.js';
 import CashDropReconcilerPage from './Pages/CdValidation.js';
 import BankDrop from './Pages/BankDrop.js';
+import Odoo from './Pages/Odoo.js';
 import ProtectedRoute from './components/ProtectedRoute';
 import { API_ENDPOINTS, clearSessionAndRedirectToLogin } from './config/api';
 
@@ -106,6 +107,7 @@ function App() {
     <Route path="/cd-dashboard" element={<ProtectedRoute><CdDashboard /></ProtectedRoute>} />
     <Route path="/cd-validation" element={<ProtectedRoute><CashDropReconcilerPage /></ProtectedRoute>} />
     <Route path="/bank-drop" element={<ProtectedRoute><BankDrop /></ProtectedRoute>} />
+    <Route path="/odoo" element={<ProtectedRoute><Odoo /></ProtectedRoute>} />
    </Routes>
    </>
   );

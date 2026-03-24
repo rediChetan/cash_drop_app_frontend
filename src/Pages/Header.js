@@ -95,6 +95,7 @@ function Header({ sessionValid = true }) {
                         <>
                             <Link to="/cash-drop" className="m-3 p-3 transition hover:underline" style={{ color: COLORS.magenta, fontSize: '18px' }}>Cash Drop</Link>
                             <Link to="/cd-dashboard" className="m-3 p-3 transition hover:underline" style={{ color: COLORS.magenta, fontSize: '18px' }}>Cash Drop Dashboard</Link>
+                            <Link to="/odoo" className="m-3 p-3 transition hover:underline" style={{ color: COLORS.magenta, fontSize: '18px' }}>Shop</Link>
                             {isAdmin && (
                                 <Link to="/dashboard" className="m-3 p-3 transition hover:underline" style={{ color: COLORS.magenta, fontSize: '18px' }}>Admin Dashboard</Link>
                             )}
@@ -157,6 +158,14 @@ function Header({ sessionValid = true }) {
                                         style={{ color: COLORS.magenta, fontSize: '16px' }}
                                     >
                                         Cash Drop Dashboard
+                                    </Link>
+                                    <Link 
+                                        to="/odoo" 
+                                        onClick={handleLinkClick}
+                                        className="block p-3 rounded transition hover:bg-gray-200" 
+                                        style={{ color: COLORS.magenta, fontSize: '16px' }}
+                                    >
+                                        Shop
                                     </Link>
                                     {isAdmin && (
                                         <Link 
