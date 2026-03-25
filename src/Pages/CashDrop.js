@@ -74,11 +74,12 @@ function CashDrop() {
     { name: 'Pennies', value: 0.01, field: 'pennies', display: 'Pennies ($0.01)' },
   ];
   // 1 quarter roll = 40×$0.25=$10; 1 dime roll = 50×$0.10=$5; 1 nickel roll = 40×$0.05=$2; 1 penny roll = 50×$0.01=$0.50
+  /** apiField = column on cash_drop / FormData (snake_case); field = form state (camelCase) */
   const ROLLS_CONFIG = [
-    { name: 'Quarter Rolls', value: 10, field: 'quarterRolls', display: 'Quarter Rolls (40×$0.25=$10)' },
-    { name: 'Dime Rolls', value: 5, field: 'dimeRolls', display: 'Dime Rolls (50×$0.10=$5)' },
-    { name: 'Nickel Rolls', value: 2, field: 'nickelRolls', display: 'Nickel Rolls (40×$0.05=$2)' },
-    { name: 'Penny Rolls', value: 0.50, field: 'pennyRolls', display: 'Penny Rolls (50×$0.01=$0.50)' },
+    { name: 'Quarter Rolls', value: 10, field: 'quarterRolls', apiField: 'quarter_rolls', display: 'Quarter Rolls (40×$0.25=$10)' },
+    { name: 'Dime Rolls', value: 5, field: 'dimeRolls', apiField: 'dime_rolls', display: 'Dime Rolls (50×$0.10=$5)' },
+    { name: 'Nickel Rolls', value: 2, field: 'nickelRolls', apiField: 'nickel_rolls', display: 'Nickel Rolls (40×$0.05=$2)' },
+    { name: 'Penny Rolls', value: 0.50, field: 'pennyRolls', apiField: 'penny_rolls', display: 'Penny Rolls (50×$0.01=$0.50)' },
   ];
 
   // --- EFFECTS ---
@@ -395,13 +396,13 @@ function CashDrop() {
   const calculateDropAmount = () => (parseFloat(calculateTotalCash()) - parseFloat(formData.startingCash)).toFixed(2);
   const calculateVariance = () => (parseFloat(calculateDropAmount()) - parseFloat(formData.cashReceivedOnReceipt || 0)).toFixed(2);
 
-  const calculateDenominations = () => {
+  /** Same greedy allocation as the UI; used for submit/draft FormData so the server always gets denoms (not only after expanding the breakdown). */
+  const computeDropDenominationBreakdown = () => {
     const amountToDrop = parseFloat(calculateDropAmount());
-    if (amountToDrop <= 0) { setCashDropDenominations(null); return; }
+    if (amountToDrop <= 0) return null;
 
     let remaining = Math.round(amountToDrop * 100);
     const dropBreakdown = {};
-    const finalDrawer = {};
 
     DENOMINATION_CONFIG.forEach(denom => {
       const valCents = Math.round(denom.value * 100);
@@ -412,7 +413,41 @@ function CashDrop() {
         remaining -= count * valCents;
       }
       dropBreakdown[denom.field] = count;
-      finalDrawer[denom.field] = available - count;
+    });
+
+    const REMAINING_EPS_CENTS = 1;
+    const rollsNecessary = remaining > REMAINING_EPS_CENTS;
+
+    ROLLS_CONFIG.forEach((roll) => {
+      const valCents = Math.round(roll.value * 100);
+      const available = Math.floor(parseFloat(formData[roll.field]) || 0);
+      let count = 0;
+      if (rollsNecessary && valCents > 0 && remaining > REMAINING_EPS_CENTS) {
+        count = Math.min(Math.floor(remaining / valCents), available);
+        remaining -= count * valCents;
+      }
+      dropBreakdown[roll.apiField] = count;
+    });
+
+    return dropBreakdown;
+  };
+
+  const calculateDenominations = () => {
+    const dropBreakdown = computeDropDenominationBreakdown();
+    if (!dropBreakdown) {
+      setCashDropDenominations(null);
+      setRemainingCashInDrawer(null);
+      return;
+    }
+
+    const finalDrawer = {};
+    DENOMINATION_CONFIG.forEach(denom => {
+      const available = formData[denom.field];
+      finalDrawer[denom.field] = available - (dropBreakdown[denom.field] || 0);
+    });
+    ROLLS_CONFIG.forEach((roll) => {
+      const available = Math.floor(parseFloat(formData[roll.field]) || 0);
+      finalDrawer[roll.apiField] = available - (dropBreakdown[roll.apiField] || 0);
     });
 
     setCashDropDenominations(dropBreakdown);
@@ -437,9 +472,10 @@ function CashDrop() {
       return;
     }
     const token = sessionStorage.getItem('access_token');
+    const hadDropDraft = !!draftId;
+    const hadDrawerDraft = !!draftDrawerId;
     setIsSubmitting(true);
     try {
-      // 1. Save/Update Drawer
       const drawerData = {
         workstation: formData.workStation,
         shift_number: formData.shiftNumber,
@@ -465,31 +501,12 @@ function CashDrop() {
         penny_rolls: parseFloat(formData.pennyRolls || 0)
       };
 
-      let dRes;
-      if (draftDrawerId) {
-        dRes = await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(draftDrawerId), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(drawerData),
-        });
-      } else {
-        dRes = await fetch(API_ENDPOINTS.CASH_DRAWER, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(drawerData),
-        });
-      }
-
-      if (!dRes.ok) {
-        const errorData = await dRes.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || 'Failed to save Drawer draft.');
-      }
-      const dResult = await dRes.json();
-      setDraftDrawerId(dResult.id);
-
-      // 2. Save/Update Drop as Draft
+      // 1. Save cash drop draft first (no new drawer yet — avoids orphan drawer if this fails).
+      // If a drawer already exists for this draft, keep the link so the row stays consistent.
       const dropForm = new FormData();
-      dropForm.append('drawer_entry', dResult.id);
+      if (draftDrawerId) {
+        dropForm.append('drawer_entry', draftDrawerId);
+      }
       dropForm.append('workstation', formData.workStation);
       dropForm.append('shift_number', formData.shiftNumber);
       dropForm.append('date', formData.date);
@@ -500,13 +517,11 @@ function CashDrop() {
       if (formData.notes) dropForm.append('notes', formData.notes);
       if (labelImage) dropForm.append('label_image', labelImage);
 
-      Object.keys(cashDropDenominations || {}).forEach(key => {
-        dropForm.append(key, cashDropDenominations[key] || 0);
+      const draftDenomBreakdown = computeDropDenominationBreakdown();
+      const d = draftDenomBreakdown || {};
+      Object.keys(d).forEach(key => {
+        dropForm.append(key, d[key] ?? 0);
       });
-      dropForm.append('quarter_rolls', formData.quarterRolls || 0);
-      dropForm.append('dime_rolls', formData.dimeRolls || 0);
-      dropForm.append('nickel_rolls', formData.nickelRolls || 0);
-      dropForm.append('penny_rolls', formData.pennyRolls || 0);
 
       let dropRes;
       if (draftId) {
@@ -528,7 +543,64 @@ function CashDrop() {
         throw new Error(errorData.error || 'Failed to save draft.');
       }
       const dropResult = await dropRes.json();
-      setDraftId(dropResult.id);
+      const savedDropId = dropResult.id;
+
+      // 2. Save / update cash drawer draft
+      let dRes;
+      if (draftDrawerId) {
+        dRes = await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(draftDrawerId), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(drawerData),
+        });
+      } else {
+        dRes = await fetch(API_ENDPOINTS.CASH_DRAWER, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(drawerData),
+        });
+      }
+
+      if (!dRes.ok) {
+        const errorData = await dRes.json().catch(() => ({ error: 'Unknown error' }));
+        if (!hadDropDraft) {
+          await fetch(API_ENDPOINTS.DELETE_CASH_DROP(savedDropId), {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+        }
+        throw new Error(errorData.error || 'Failed to save Drawer draft.');
+      }
+      const dResult = await dRes.json();
+
+      // 3. Link new drawer to the cash drop (only when the drawer was just created)
+      if (!hadDrawerDraft && dResult?.id) {
+        const linkRes = await fetch(API_ENDPOINTS.CASH_DROP_BY_ID(savedDropId), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ drawer_entry: dResult.id }),
+        });
+        if (!linkRes.ok) {
+          const linkErr = await linkRes.json().catch(() => ({}));
+          await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(dResult.id), {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (!hadDropDraft) {
+            await fetch(API_ENDPOINTS.DELETE_CASH_DROP(savedDropId), {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` },
+            });
+          }
+          throw new Error(linkErr.error || 'Failed to link cash drawer to cash drop.');
+        }
+      }
+
+      setDraftId(savedDropId);
+      setDraftDrawerId(dResult.id);
       
       // Reset form to new cash drop after saving draft
       setFormData({
@@ -649,8 +721,7 @@ function CashDrop() {
         return;
       }
 
-      // 1. Update existing drawer if draft exists, otherwise create new one (only after drop is validated)
-      const drawerData = {
+      const drawerDataSubmitted = {
         workstation: formData.workStation,
         shift_number: formData.shiftNumber,
         date: formData.date,
@@ -675,21 +746,21 @@ function CashDrop() {
         penny_rolls: parseFloat(formData.pennyRolls || 0)
       };
 
+      // 1. Save drawer as DRAFT only — if cash drop submit fails next, we delete this draft (no orphan submitted drawer).
+      const drawerDataDraft = { ...drawerDataSubmitted, status: 'drafted' };
       let dRes;
       if (draftDrawerId) {
-        // Update existing drawer
         dRes = await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(draftDrawerId), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(drawerData),
+          body: JSON.stringify(drawerDataDraft),
         });
       } else {
-        // Create new drawer
         dRes = await fetch(API_ENDPOINTS.CASH_DRAWER, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(drawerData),
-      });
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(drawerDataDraft),
+        });
       }
 
       if (!dRes.ok) {
@@ -698,10 +769,13 @@ function CashDrop() {
         throw new Error(errorData.error || 'Failed to save Drawer data.');
       }
       const dResult = await dRes.json();
+      const drawerIdForRollback = dResult.id;
 
-      // 2. Save Drop with Image
+      // 2. Submit cash drop (linked to draft drawer). If this fails, remove the draft drawer so CD dashboard stays consistent.
+      const submitBreakdown = computeDropDenominationBreakdown();
+      const denomPayload = submitBreakdown || {};
       const dropForm = new FormData();
-      dropForm.append('drawer_entry', dResult.id);
+      dropForm.append('drawer_entry', drawerIdForRollback);
       dropForm.append('workstation', formData.workStation);
       dropForm.append('shift_number', formData.shiftNumber);
       dropForm.append('date', formData.date);
@@ -713,47 +787,64 @@ function CashDrop() {
       if (formData.notes) dropForm.append('notes', formData.notes);
       if (labelImage) dropForm.append('label_image', labelImage);
 
-      Object.keys(cashDropDenominations).forEach(key => {
-        dropForm.append(key, cashDropDenominations[key]);
+      Object.keys(denomPayload).forEach(key => {
+        dropForm.append(key, denomPayload[key]);
       });
-      dropForm.append('quarter_rolls', formData.quarterRolls || 0);
-      dropForm.append('dime_rolls', formData.dimeRolls || 0);
-      dropForm.append('nickel_rolls', formData.nickelRolls || 0);
-      dropForm.append('penny_rolls', formData.pennyRolls || 0);
 
       let dropRes;
       if (draftId) {
-        // Update existing draft
         dropRes = await fetch(API_ENDPOINTS.CASH_DROP_BY_ID(draftId), {
           method: 'PUT',
           headers: { 'Authorization': `Bearer ${token}` },
           body: dropForm,
         });
       } else {
-        // Create new
         dropRes = await fetch(API_ENDPOINTS.CASH_DROP, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: dropForm,
-      });
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: dropForm,
+        });
       }
 
       if (!dropRes.ok) {
         const errorData = await dropRes.json().catch(() => ({}));
+        // Only remove the drawer we just created. If we were finalizing an existing draft, deleting the drawer
+        // could CASCADE-delete the cash drop — leave the draft drawer so the user can retry.
+        if (!draftId) {
+          const delRes = await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(drawerIdForRollback), {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (!delRes.ok) {
+            console.error('Rollback: failed to delete draft drawer after cash drop error', await delRes.text().catch(() => ''));
+          }
+        }
         throw new Error(errorData.error || 'Failed to save Cash Drop & Image.');
       }
-      
-      // Clear draft IDs
+
+      // 3. Promote drawer to submitted now that cash drop is saved.
+      const finalizeDrawerRes = await fetch(API_ENDPOINTS.CASH_DRAWER_BY_ID(drawerIdForRollback), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(drawerDataSubmitted),
+      });
+      if (!finalizeDrawerRes.ok) {
+        const fd = await finalizeDrawerRes.json().catch(() => ({}));
+        showStatusMessage(
+          fd.error || 'Cash drop was saved but updating the cash drawer to submitted failed. Check the dashboard or try again.',
+          'error'
+        );
+      } else {
+        showStatusMessage('Cash Drop submitted successfully.', 'success');
+        setTimeout(() => navigate('/cd-dashboard'), 500);
+      }
+
       setDraftId(null);
       setDraftDrawerId(null);
-      
-      // Success - navigate immediately
-      showStatusMessage('Cash Drop submitted successfully.', 'success');
-      setTimeout(() => navigate('/cd-dashboard'), 500);
-
     } catch (err) {
-      setIsSubmitting(false);
       showStatusMessage(err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -997,14 +1088,27 @@ function CashDrop() {
 
             {/* Auto Drop Column */}
             <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-4 md:p-6">
-              <h3 className="font-black uppercase mb-4 md:mb-6 tracking-widest border-b border-blue-100 pb-2" style={{ fontSize: '18px', color: COLORS.magenta }}>2. Suggested Cash Drop</h3>
+              <h3 className="font-black uppercase mb-2 tracking-widest border-b border-blue-100 pb-2" style={{ fontSize: '18px', color: COLORS.magenta }}>2. Suggested Cash Drop</h3>
+              <p className="text-xs mb-4 md:mb-6" style={{ color: COLORS.gray }}>
+                Rolls are listed only if the net drop still requires them after allocating bills and loose coins.
+              </p>
               <div className="space-y-2">
-                {cashDropDenominations ? DENOMINATION_CONFIG.map(d => cashDropDenominations[d.field] > 0 && (
-                  <div key={d.field} className="flex justify-between p-2 bg-white rounded border border-blue-50">
-                    <span className="text-xs font-bold uppercase" style={{ color: COLORS.gray, fontSize: '14px' }}>{d.display}</span>
-                    <span className="font-black" style={{ color: COLORS.magenta, fontSize: '14px' }}>x {cashDropDenominations[d.field]}</span>
-                  </div>
-                )) : <p className="text-center text-gray-300 py-20 italic" style={{ fontSize: '14px' }}>Enter amounts to calculate...</p>}
+                {cashDropDenominations ? (
+                  <>
+                    {DENOMINATION_CONFIG.map(d => cashDropDenominations[d.field] > 0 && (
+                      <div key={d.field} className="flex justify-between p-2 bg-white rounded border border-blue-50">
+                        <span className="text-xs font-bold uppercase" style={{ color: COLORS.gray, fontSize: '14px' }}>{d.display}</span>
+                        <span className="font-black" style={{ color: COLORS.magenta, fontSize: '14px' }}>x {cashDropDenominations[d.field]}</span>
+                      </div>
+                    ))}
+                    {ROLLS_CONFIG.map(r => (cashDropDenominations[r.apiField] || 0) > 0 && (
+                      <div key={r.apiField} className="flex justify-between p-2 bg-white rounded border border-blue-50">
+                        <span className="text-xs font-bold uppercase" style={{ color: COLORS.gray, fontSize: '14px' }}>{r.display}</span>
+                        <span className="font-black" style={{ color: COLORS.magenta, fontSize: '14px' }}>x {cashDropDenominations[r.apiField]}</span>
+                      </div>
+                    ))}
+                  </>
+                ) : <p className="text-center text-gray-300 py-20 italic" style={{ fontSize: '14px' }}>Enter amounts to calculate...</p>}
                 <div className="mt-4 pt-4 border-t space-y-2">
                   <div className="flex justify-between" style={{ color: COLORS.yellowGreen, fontSize: '14px' }}>
                     <span>Net Drop:</span> 
