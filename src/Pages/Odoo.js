@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 
-const ODOO_SHOP_URL = 'https://bbtesting-ver1.odoo.com/shop';
+/** Set in `.env`: REACT_APP_ODOO_SHOP_URL=https://your-instance.odoo.com/shop */
+const ODOO_SHOP_URL =
+  process.env.REACT_APP_ODOO_SHOP_URL;
 
 function Odoo() {
   useEffect(() => {
