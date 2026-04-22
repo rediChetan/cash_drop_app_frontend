@@ -11,6 +11,7 @@ import CashDropReconcilerPage from './Pages/CdValidation.js';
 import BankDrop from './Pages/BankDrop.js';
 import Odoo from './Pages/Odoo.js';
 import ProtectedRoute from './components/ProtectedRoute';
+import SessionIdleGuard from './components/SessionIdleGuard';
 import { API_ENDPOINTS, clearSessionAndRedirectToLogin } from './config/api';
 
 function App() {
@@ -98,6 +99,7 @@ function App() {
   return (
    <>
     <Header sessionValid={sessionValid} />
+    <SessionIdleGuard />
    <Routes>
     <Route path="/" element={<Homepage />} />
     <Route path="/login" element={<LoginPage />} />

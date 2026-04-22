@@ -53,11 +53,20 @@ function CashDrop() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftId, setDraftId] = useState(null);
   const [draftDrawerId, setDraftDrawerId] = useState(null);
-  // Calendar: { date, canCashDrop, isCurrentDay }[] for the month currently viewed in picker or selected date
+  // Calendar: { date, canCashDrop, isCurrentDay, atMaxCashDrops }[] from API for the month in the picker / selected date
   const [calendarDates, setCalendarDates] = useState([]);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [pickerView, setPickerView] = useState({ year: null, month: null }); // month 1-12, when open
   const [duplicateDropWarning, setDuplicateDropWarning] = useState(null); // message if a drop already exists for this shift/register/date
+  /** User confirmed adding a drop when all existing drops are bank-dropped but count < daily max (per date key YYYY-MM-DD). */
+  const [bankDropMismatchAck, setBankDropMismatchAck] = useState({});
+  const [bankDropMismatchModal, setBankDropMismatchModal] = useState({
+    show: false,
+    targetDate: null,
+    dropCount: null,
+    maxDay: null,
+    bankDropped: null,
+  });
 
   const DENOMINATION_CONFIG = [
     { name: 'Hundreds', value: 100, field: 'hundreds', display: 'Hundreds ($100)' },
@@ -304,7 +313,7 @@ function CashDrop() {
         return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) };
       })();
 
-  // Fetch cash drop calendar for the target month
+  // Fetch cash drop calendar for the target month (re-run when max/day limit loads or changes)
   useEffect(() => {
     const { year: y, month: m } = calendarTarget;
     if (!y || !m) return;
@@ -314,13 +323,18 @@ function CashDrop() {
         if (res.ok) {
           const data = await res.json();
           setCalendarDates(data.dates || []);
+        } else {
+          const errText = await res.text().catch(() => '');
+          console.warn('Cash drop calendar request failed:', res.status, errText);
+          setCalendarDates([]);
         }
       } catch (e) {
         console.error('Error fetching cash drop calendar:', e);
+        setCalendarDates([]);
       }
     };
     fetchCalendar();
-  }, [calendarTarget.year, calendarTarget.month]);
+  }, [calendarTarget.year, calendarTarget.month, adminSettings.max_cash_drops_per_day, datePickerOpen]);
 
   // Check for existing drop when shift + register + date are set (early warning)
   useEffect(() => {
@@ -457,12 +471,46 @@ function CashDrop() {
   // Whether selected date is allowed for this user (API + non-admins limited to today & yesterday PST)
   const pstToday = getPSTDate();
   const pstYesterday = getPSTYesterday();
-  const selectedDateInfo = calendarDates.find(d => d.date === formData.date);
+  /** Match calendar API `date` to grid YYYY-MM-DD (mysql2 / JSON may include time). */
+  const toCalendarDayKey = (v) => {
+    if (v == null || v === '') return '';
+    return String(v).replace(/T.*$/, '').replace(/\s.*$/, '').trim().slice(0, 10);
+  };
+  /** Inline colors: Tailwind does not reliably emit classes built via `${bg}` in production. */
+  const getCalendarDayStyle = ({ isFuture, atMax, needsBankDropConfirm, bankDropAcknowledged, isCurrent, canDrop }) => {
+    if (isFuture) return { backgroundColor: '#f3f4f6', color: '#9ca3af' };
+    if (atMax) return { backgroundColor: '#b91c1c', color: '#ffffff', boxShadow: 'inset 0 0 0 1px #7f1d1d' };
+    if (needsBankDropConfirm && !bankDropAcknowledged) {
+      return { backgroundColor: '#ea580c', color: '#ffffff', boxShadow: 'inset 0 0 0 1px #9a3412' };
+    }
+    if (needsBankDropConfirm && bankDropAcknowledged) {
+      return { backgroundColor: '#15803d', color: '#ffffff' };
+    }
+    if (isCurrent) return { backgroundColor: '#2563eb', color: '#ffffff' };
+    if (canDrop === false) return { backgroundColor: '#ef4444', color: '#ffffff' };
+    if (canDrop === true) return { backgroundColor: '#22c55e', color: '#ffffff' };
+    return { backgroundColor: '#f3f4f6', color: '#374151' };
+  };
+  const selectedDateInfo = calendarDates.find((d) => toCalendarDayKey(d.date) === toCalendarDayKey(formData.date));
   const rawCanCashDrop = selectedDateInfo ? selectedDateInfo.canCashDrop : null;
+  const maxDaySel = selectedDateInfo?.maxCashDropsPerDay ?? adminSettings.max_cash_drops_per_day;
+  const cntSel = selectedDateInfo?.dropCountTowardLimit;
+  const atMaxSelected =
+    selectedDateInfo?.atMaxCashDrops === true ||
+    selectedDateInfo?.atMaxCashDrops === 1 ||
+    (maxDaySel != null &&
+      cntSel != null &&
+      Number(cntSel) >= Number(maxDaySel));
+  const atMaxBlocksNewDrop = atMaxSelected && draftId == null;
+  const mismatchSel =
+    selectedDateInfo?.needsBankDropCountConfirm === true ||
+    selectedDateInfo?.needsBankDropCountConfirm === 1;
+  const mismatchAcked = !!bankDropMismatchAck[toCalendarDayKey(formData.date)];
+  const mismatchBlocks = mismatchSel && !mismatchAcked;
   const inNonAdminAllowedWindow =
     formData.date === pstToday || formData.date === pstYesterday;
   const isSelectedDateAllowed =
-    rawCanCashDrop === false
+    atMaxBlocksNewDrop || mismatchBlocks || rawCanCashDrop === false
       ? false
       : rawCanCashDrop === true && !isAdmin && formData.date && !inNonAdminAllowedWindow
         ? false
@@ -482,7 +530,20 @@ function CashDrop() {
     );
   };
 
+  const openBankDropMismatchModal = (targetDate, dropCount, maxDay, bankDropped) => {
+    setBankDropMismatchModal({ show: true, targetDate, dropCount, maxDay, bankDropped });
+  };
+
   const handleSaveDraft = async () => {
+    if (mismatchBlocks) {
+      openBankDropMismatchModal(
+        formData.date,
+        selectedDateInfo?.dropCountTowardLimit,
+        maxDaySel,
+        selectedDateInfo?.bankDroppedCount
+      );
+      return;
+    }
     if (isSelectedDateAllowed === false) {
       showStatusMessage('Cash drop is not allowed for this date.', 'error');
       return;
@@ -694,6 +755,15 @@ function CashDrop() {
   };
 
   const handleSubmit = async () => {
+    if (mismatchBlocks) {
+      openBankDropMismatchModal(
+        formData.date,
+        selectedDateInfo?.dropCountTowardLimit,
+        maxDaySel,
+        selectedDateInfo?.bankDroppedCount
+      );
+      return;
+    }
     if (isSelectedDateAllowed === false) {
       showStatusMessage('Cash drop is not allowed for this date.', 'error');
       return;
@@ -877,6 +947,66 @@ function CashDrop() {
           </div>
         </div>
       )}
+
+      {bankDropMismatchModal.show && bankDropMismatchModal.targetDate && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bank-drop-mismatch-title"
+        >
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 border border-gray-200">
+            <h3 id="bank-drop-mismatch-title" className="font-black uppercase tracking-wide mb-3" style={{ fontSize: '18px', color: COLORS.magenta }}>
+              Bank drop already recorded
+            </h3>
+            <p className="text-gray-700 mb-4" style={{ fontSize: '14px' }}>
+              For <strong>{bankDropMismatchModal.targetDate}</strong>, at least one cash drop is already bank dropped
+              (<strong>{bankDropMismatchModal.bankDropped ?? '—'}</strong> of{' '}
+              <strong>{bankDropMismatchModal.dropCount ?? '—'}</strong> submitted drops), and you are still under the
+              daily limit of <strong>{bankDropMismatchModal.maxDay ?? adminSettings.max_cash_drops_per_day}</strong>.
+              Other drops may still be submitted or reconciled. Adding another cash drop may be unusual. Do you still want to continue?
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 rounded font-bold border border-gray-300 text-gray-700 hover:bg-gray-50"
+                style={{ fontSize: '14px' }}
+                onClick={() =>
+                  setBankDropMismatchModal({
+                    show: false,
+                    targetDate: null,
+                    dropCount: null,
+                    maxDay: null,
+                    bankDropped: null,
+                  })
+                }
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded font-bold text-white"
+                style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
+                onClick={() => {
+                  const d = bankDropMismatchModal.targetDate;
+                  setBankDropMismatchAck((prev) => ({ ...prev, [d]: true }));
+                  setFormData((prev) => ({ ...prev, date: d }));
+                  setBankDropMismatchModal({
+                    show: false,
+                    targetDate: null,
+                    dropCount: null,
+                    maxDay: null,
+                    bankDropped: null,
+                  });
+                  setDatePickerOpen(false);
+                }}
+              >
+                Yes, continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Status Message */}
       {statusMessage.show && (
@@ -989,31 +1119,76 @@ function CashDrop() {
                           for (let i = 0; i < startPad; i++) cells.push(<span key={`pad-${i}`} />);
                           for (let d = 1; d <= daysInMonth; d++) {
                             const dateStr = `${pickerView.year}-${String(pickerView.month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                            const info = calendarDates.find(x => x.date === dateStr);
+                            const info = calendarDates.find((x) => toCalendarDayKey(x.date) === dateStr);
                             const isCurrent = dateStr === pstToday;
                             const apiCan = info?.canCashDrop;
+                            const maxDay = info?.maxCashDropsPerDay ?? adminSettings.max_cash_drops_per_day;
+                            const cnt = info?.dropCountTowardLimit;
+                            const atMax =
+                              info?.atMaxCashDrops === true ||
+                              info?.atMaxCashDrops === 1 ||
+                              (maxDay != null &&
+                                cnt != null &&
+                                Number(cnt) >= Number(maxDay));
                             let canDrop = apiCan;
                             if (apiCan === true && !isAdmin) {
                               canDrop = dateStr === pstToday || dateStr === pstYesterday;
                             }
                             const isSelected = formData.date === dateStr;
-                            let bg = 'bg-gray-100';
-                            if (isCurrent) bg = 'bg-blue-500 text-white';
-                            else if (canDrop === false) bg = 'bg-red-500 text-white';
-                            else if (canDrop === true) bg = 'bg-green-500 text-white';
                             const isFuture = dateStr > pstToday;
-                            const title = info ? (canDrop ? 'Can add cash drop' : 'Cannot add cash drop') : dateStr;
+                            const needsBankDropConfirm =
+                              info?.needsBankDropCountConfirm === true ||
+                              info?.needsBankDropCountConfirm === 1;
+                            const bankDropAcknowledged = !!bankDropMismatchAck[dateStr];
+                            const dayStyle = getCalendarDayStyle({
+                              isFuture,
+                              atMax,
+                              needsBankDropConfirm,
+                              bankDropAcknowledged,
+                              isCurrent,
+                              canDrop,
+                            });
+                            const title = info
+                              ? atMax
+                                ? `Maximum cash drops for this day (${maxDay}${cnt != null ? ` — ${cnt} of ${maxDay}` : ''})`
+                                : needsBankDropConfirm && !bankDropAcknowledged
+                                  ? `At least one cash drop is bank-dropped; ${cnt ?? '?'} of ${maxDay} slots used. Click to confirm before adding another.`
+                                  : needsBankDropConfirm && bankDropAcknowledged
+                                    ? 'Confirmed — you may add another cash drop for this day'
+                                    : canDrop
+                                      ? 'Can add cash drop'
+                                      : 'Cannot add cash drop'
+                              : dateStr;
+                            const blockedByMax = atMax && draftId == null;
+                            const blockedByPolicy = canDrop === false;
+                            const dayClickBlocked = isFuture || blockedByMax || blockedByPolicy;
                             cells.push(
                               <button
                                 key={dateStr}
                                 type="button"
                                 onClick={() => {
                                   if (isFuture) return;
+                                  if (blockedByMax) {
+                                    showStatusMessage(
+                                      `Maximum cash drops per day (${maxDay}) reached for this date. Please ignore any incorrect entries on the dashboard first if you need to add another drop.`,
+                                      'error'
+                                    );
+                                    return;
+                                  }
+                                  if (blockedByPolicy) {
+                                    showStatusMessage('Cash drop is not allowed for this date.', 'error');
+                                    return;
+                                  }
+                                  if (needsBankDropConfirm && !bankDropAcknowledged) {
+                                    openBankDropMismatchModal(dateStr, cnt, maxDay, info?.bankDroppedCount);
+                                    return;
+                                  }
                                   setFormData(prev => ({ ...prev, date: dateStr }));
                                   setDatePickerOpen(false);
                                 }}
                                 disabled={isFuture}
-                                className={`py-1.5 rounded ${bg} ${isSelected ? 'ring-2 ring-offset-1 ring-black' : ''} ${isFuture ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
+                                className={`py-1.5 rounded ${isSelected ? 'ring-2 ring-offset-1 ring-black' : ''} ${isFuture ? 'opacity-50 cursor-not-allowed' : dayClickBlocked ? 'cursor-not-allowed' : 'hover:opacity-90'}`}
+                                style={dayStyle}
                                 title={title}
                               >
                                 {d}
@@ -1052,8 +1227,40 @@ function CashDrop() {
             </div>
           )}
 
-          {/* Early warning: cannot add cash drop for this date (show as soon as shift + workstation + date are set) */}
-          {formData.shiftNumber && formData.workStation && formData.date && selectedDateInfo && isSelectedDateAllowed === false && (
+          {/* Bank-drop complete but fewer drops than daily max — confirm before saving/submitting */}
+          {formData.date && selectedDateInfo && mismatchBlocks && (
+            <div
+              className="mb-6 p-4 rounded-lg"
+              role="alert"
+              style={{
+                backgroundColor: '#FFEDD5',
+                border: '2px solid #EA580C',
+                color: '#9A3412',
+              }}
+            >
+              <p style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>
+                At least one cash drop is bank-dropped and you are under the daily max.
+              </p>
+              <p style={{ fontSize: '13px', margin: '0 0 12px 0' }}>
+                {formData.date}: {selectedDateInfo?.bankDroppedCount ?? '—'} bank-dropped of {cntSel ?? '—'} submitted
+                (limit {maxDaySel} per day). You may still have others in submitted or reconciled. Confirm before adding
+                another drop for this date.
+              </p>
+              <button
+                type="button"
+                className="px-4 py-2 rounded font-bold text-white"
+                style={{ backgroundColor: COLORS.magenta, fontSize: '14px' }}
+                onClick={() =>
+                  openBankDropMismatchModal(formData.date, cntSel, maxDaySel, selectedDateInfo?.bankDroppedCount)
+                }
+              >
+                Review and confirm
+              </button>
+            </div>
+          )}
+
+          {/* Early warning: invalid date (show as soon as date is set — same as calendar click feedback) */}
+          {formData.date && selectedDateInfo && isSelectedDateAllowed === false && !mismatchBlocks && (
             <div
               className="mb-6 p-4 rounded-lg"
               role="alert"
@@ -1064,10 +1271,20 @@ function CashDrop() {
               }}
             >
               <p style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>
-                You cannot add a cash drop for this date.
+                {atMaxBlocksNewDrop
+                  ? 'Maximum cash drops reached for this day.'
+                  : 'You cannot add a cash drop for this date.'}
               </p>
               <p style={{ fontSize: '13px', margin: 0 }}>
-                The selected date ({formData.date}) cannot be used for a cash drop. Choose a different date from the calendar above or contact an admin.
+                {atMaxBlocksNewDrop ? (
+                  <>
+                    This day already has the maximum number of cash drops ({maxDaySel} per day). Use the Cash Drop Dashboard to ignore an incorrect entry if you need to submit another drop for {formData.date}.
+                  </>
+                ) : (
+                  <>
+                    The selected date ({formData.date}) cannot be used for a cash drop. Choose a different date from the calendar or contact an admin.
+                  </>
+                )}
               </p>
             </div>
           )}

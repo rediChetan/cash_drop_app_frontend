@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_ENDPOINTS } from '../config/api';
-import { getPSTDate, getPSTWeekStart, getPSTMonthStart, formatPSTDate } from '../utils/dateUtils';
+import { getPSTDate, getPSTWeekStart, getPSTMonthStart, formatPSTDate, formatPSTDateTime } from '../utils/dateUtils';
 import { CashDenominationDisplay, CashDenominationEditor } from '../components/CashDenominationDisplay';
 
 function CashDropValidation() {
@@ -383,6 +383,7 @@ function CashDropValidation() {
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Date / Shift / Register / User</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Cash Drop</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Cash Drop Receipt Amount</th>
+                <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>CashDrop Variance</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Reconcile Delta</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Counted Amount</th>
                 <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Action</th>
@@ -423,6 +424,11 @@ function CashDropValidation() {
                       <td className="p-2 md:p-4">
                         <div className="font-black" style={{ fontSize: '14px' }}>{formatPSTDate(item.date)}</div> 
                         <div className="font-bold uppercase" style={{ color: COLORS.magenta, fontSize: '14px' }}>{item.shift_number} | {item.workstation} | {item.user_name}</div>
+                        {item.submitted_at && (
+                          <div className="italic mt-1" style={{ color: COLORS.gray, fontSize: '13px' }}>
+                            Submitted: {formatPSTDateTime(null, item.submitted_at)}
+                          </div>
+                        )}
                       </td>
                       <td className="p-2 md:p-4">
                         {item.label_image_url ? (
@@ -441,6 +447,13 @@ function CashDropValidation() {
                         )}
                       </td>
                       <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px', color: COLORS.gray }}>${item.ws_label_amount}</td>
+                      <td
+                        className={`p-2 md:p-4 font-black ${(parseFloat(item.variance || 0) !== 0) ? 'text-red-500' : 'text-gray-300'}`}
+                        style={{ fontSize: '14px' }}
+                        title="Cash drop total − receipt amount"
+                      >
+                        {`$${(isNaN(parseFloat(item.variance)) ? 0 : parseFloat(item.variance)).toFixed(2)}`}
+                      </td>
                       <td className={`p-2 md:p-4 font-black ${(item.is_reconciled ? displayReconcileDelta !== 0 : reconcileDelta !== 0) ? 'text-red-500' : 'text-gray-300'}`} style={{ fontSize: '14px' }} title="Adjusted total − Cash drop total">
                         {item.is_reconciled ? `$${displayReconcileDelta.toFixed(2)}` : `$${isNaN(reconcileDelta) ? '0.00' : reconcileDelta.toFixed(2)}`}
                       </td>
@@ -545,7 +558,7 @@ function CashDropValidation() {
                     </tr>
                     {isExpanded && (
                       <tr className="bg-gray-50">
-                        <td colSpan="7" className="p-6 md:p-8 align-top">
+                        <td colSpan="8" className="p-6 md:p-8 align-top">
                           <div className="w-full max-w-7xl mx-auto min-w-0 flex flex-col gap-6 md:gap-8">
                             {/* TOP: Receipt & notes — same max width as cash editor below */}
                             <div className="bg-white border rounded-xl p-5 shadow-sm w-full">

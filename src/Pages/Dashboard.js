@@ -430,8 +430,8 @@ const Dashboard = () => {
                     } else {
                         showStatusMessage("Authentication failed. Please log in again.", 'error');
                         setRegenerateAuthModal(prev => ({ ...prev, show: false, loading: false }));
-                        return;
-                    }
+            return;
+        }
                 }
                 if (response.ok) {
                     const data = await response.json();
@@ -534,7 +534,7 @@ const Dashboard = () => {
                 <div className="p-4 md:p-6 border-b bg-white">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
-                            <h2 className="font-black uppercase italic tracking-tighter" style={{ fontSize: '24px' }}>Admin <span style={{ color: COLORS.magenta }}>Dashboard</span></h2>
+                    <h2 className="font-black uppercase italic tracking-tighter" style={{ fontSize: '24px' }}>Admin <span style={{ color: COLORS.magenta }}>Dashboard</span></h2>
                         </div>
                         <Link
                             to="/register"
@@ -713,47 +713,47 @@ const Dashboard = () => {
                         {error && (
                             <div className="p-4 bg-red-50 border-l-4 border-red-500 mb-4">
                                 <p className="font-bold text-red-700" style={{ fontSize: '14px' }}>{error}</p>
-                            </div>
-                        )}
+                    </div>
+                )}
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
                                     <tr className="bg-gray-50 font-black uppercase border-b" style={{ color: COLORS.gray }}>
                                         <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>ID</th>
                                         <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Name</th>
                                         <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Email</th>
                                         <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Admin</th>
                                         <th className="p-2 md:p-4" style={{ fontSize: '14px' }}>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {users.length > 0 ? users.map(user => (
-                                        <tr key={user.id} className="border-b hover:bg-pink-50/30 transition-colors">
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {users.length > 0 ? users.map(user => (
+                                <tr key={user.id} className="border-b hover:bg-pink-50/30 transition-colors">
                                             <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px' }}>{user.id}</td>
                                             <td className="p-2 md:p-4 font-bold" style={{ fontSize: '14px' }}>{user.name}</td>
                                             <td className="p-2 md:p-4" style={{ fontSize: '14px' }}>{user.email}</td>
                                             <td className="p-2 md:p-4">
-                                                {user.is_admin ? (
+                                        {user.is_admin ? (
                                                     <span className="px-2 py-1 rounded font-bold uppercase" style={{ backgroundColor: COLORS.yellowGreen + '20', color: COLORS.yellowGreen, fontSize: '14px' }}>
-                                                        Yes
-                                                    </span>
-                                                ) : (
+                                                Yes
+                                            </span>
+                                        ) : (
                                                     <span className="px-2 py-1 rounded font-bold uppercase" style={{ backgroundColor: COLORS.gray + '20', color: COLORS.gray, fontSize: '14px' }}>
-                                                        No
-                                                    </span>
-                                                )}
-                                            </td>
+                                                No
+                                            </span>
+                                        )}
+                                    </td>
                                             <td className="p-2 md:p-4">
                                                 <div className="flex flex-col md:flex-row gap-2 flex-wrap">
-                                                    <button
-                                                        onClick={() => handleEdit(user)}
-                                                        className="px-3 py-1 rounded font-bold transition"
+                                            <button
+                                                onClick={() => handleEdit(user)}
+                                                className="px-3 py-1 rounded font-bold transition"
                                                         style={{ backgroundColor: COLORS.lightPink, color: 'white', fontSize: '14px' }}
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
                                                         onClick={() => handleRegenerateAuthenticatorClick(user)}
                                                         className="px-3 py-1 rounded font-bold transition"
                                                         style={{ backgroundColor: COLORS.yellowGreen, color: 'white', fontSize: '14px' }}
@@ -762,23 +762,23 @@ const Dashboard = () => {
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteClick(user.id, user.name)}
-                                                        className="px-3 py-1 rounded font-bold transition"
+                                                className="px-3 py-1 rounded font-bold transition"
                                                         style={{ backgroundColor: COLORS.gray, color: 'white', fontSize: '14px' }}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
                                             <td colSpan="5" className="p-20 text-center italic font-bold uppercase tracking-widest" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                                No users found
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                        No users found
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                         </div>
                     </div>
                 </div>

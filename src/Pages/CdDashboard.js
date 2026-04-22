@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS } from '../config/api';
 import { CashDenominationDisplay } from '../components/CashDenominationDisplay';
-import { getPSTDate, getPSTWeekStart, getPSTMonthStart, getPSTMonthEnd, getPSTYearStart, formatPSTDate, formatPSTDateWithTime } from '../utils/dateUtils';
+import { getPSTDate, getPSTWeekStart, getPSTMonthStart, getPSTMonthEnd, getPSTYearStart, formatPSTDate, formatPSTDateWithTime, formatPSTDateTime } from '../utils/dateUtils';
 
 function CdDashboard() {
   const navigate = useNavigate();
@@ -19,6 +19,14 @@ function CdDashboard() {
   const [statusMessage, setStatusMessage] = useState({ show: false, text: '', type: 'info' });
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'drafted' | 'submitted' | 'ignored' | 'reconciled' | 'bank_dropped'
   const [currentUserId, setCurrentUserId] = useState(null);
+
+  // Normalize to YYYY-MM-DD (backend may return date or datetime / ISO string)
+  const normalizeDate = (d) => {
+    if (d == null || d === '') return null;
+    if (typeof d === 'string') return d.replace(/T.*$/, '').replace(/\s.*$/, '').trim().slice(0, 10);
+    if (typeof d === 'object' && typeof d.toISOString === 'function') return d.toISOString().slice(0, 10);
+    return String(d).slice(0, 10);
+  };
 
   // Set page title
   useEffect(() => {
@@ -108,16 +116,14 @@ function CdDashboard() {
 
       const dropData = await dropResponse.json();
       const drawerData = await drawerResponse.json();
-      
-      const toYYYYMMDD = (d) => {
-        if (d == null || d === '') return null;
-        if (typeof d === 'string') return d.replace(/T.*$/, '').replace(/\s.*$/, '').trim().slice(0, 10);
-        if (typeof d === 'object' && typeof d.toISOString === 'function') return d.toISOString().slice(0, 10);
-        return String(d).slice(0, 10);
-      };
-      const allDatesRaw = [...dropData.map(d => toYYYYMMDD(d.date)), ...drawerData.map(d => toYYYYMMDD(d.date))].filter(Boolean);
+
+      // DATE LOG uses business date (model `date`); API filters the same way.
+      const allDatesRaw = [
+        ...dropData.map((d) => normalizeDate(d.date)),
+        ...drawerData.map((d) => normalizeDate(d.date)),
+      ].filter(Boolean);
       const allDates = [...new Set(allDatesRaw)].sort().reverse();
-      
+
       setCashDrops(dropData);
       setCashDrawers(drawerData);
       if (allDates.length > 0) setActiveDate(allDates[0]);
@@ -155,16 +161,9 @@ function CdDashboard() {
     fetchData(start, end);
   };
 
-  // Normalize date to YYYY-MM-DD for consistent comparison (backend may return date or datetime string)
-  const normalizeDate = (d) => {
-    if (d == null || d === '') return null;
-    if (typeof d === 'string') return d.replace(/T.*$/, '').replace(/\s.*$/, '').trim().slice(0, 10);
-    if (typeof d === 'object' && typeof d.toISOString === 'function') return d.toISOString().slice(0, 10);
-    return String(d).slice(0, 10);
-  };
   const uniqueDates = [...new Set([
-    ...cashDrops.map(d => normalizeDate(d.date)),
-    ...cashDrawers.map(d => normalizeDate(d.date))
+    ...cashDrops.map((d) => normalizeDate(d.date)),
+    ...cashDrawers.map((d) => normalizeDate(d.date)),
   ].filter(Boolean))].sort().reverse();
 
   // Filter cash drops by status (for display)
@@ -173,12 +172,12 @@ function CdDashboard() {
     return drop.status === statusFilter;
   };
 
-  // Build rows for activeDate: pair each drop with its drawer via drawer_entry_id; use drop's date for row placement so drop+drawer stay in sync
+  // Build rows for activeDate: pair each drop with its drawer; bucket by business `date` (register day)
   const getRowsForActiveDate = () => {
     if (!activeDate) return [];
     const normActive = normalizeDate(activeDate);
-    const dropsForDate = cashDrops.filter(d => normalizeDate(d.date) === normActive).filter(dropsPassStatusFilter);
-    const drawersForDate = cashDrawers.filter(d => normalizeDate(d.date) === normActive);
+    const dropsForDate = cashDrops.filter((d) => normalizeDate(d.date) === normActive).filter(dropsPassStatusFilter);
+    const drawersForDate = cashDrawers.filter((d) => normalizeDate(d.date) === normActive);
     const drawerByIdAll = Object.fromEntries(cashDrawers.map(d => [d.id, d]));
 
     const rows = dropsForDate.map(drop => ({
@@ -195,7 +194,7 @@ function CdDashboard() {
 
   const rowsForActiveDate = getRowsForActiveDate();
 
-  // Use selected/finalization date (drop.date / drawer.date) for the date part; time from timestamp in PST
+  // Date part comes from first arg; time from timestamp (PST). For "Saved" use business date; for "Submitted" pass the submission calendar date from submitted_at.
   const formatSubmittedOrSaved = (selectedDateStr, timestampStr) => {
     return formatPSTDateWithTime(selectedDateStr, timestampStr);
   };
@@ -402,32 +401,31 @@ function CdDashboard() {
                         <div className="h-full">
                           {drop ? (
                             <div className="h-full flex flex-col p-4 md:p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm relative">
-                              {/* Status Ribbon */}
-                              {drop.status === 'drafted' && (
-                                <div className="absolute top-0 right-0 bg-blue-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>
-                                  DRAFT
-                                </div>
-                              )}
-                              {drop.status === 'submitted' && (
-                                <div className="absolute top-0 right-0 bg-green-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>
-                                  SUBMITTED
-                                </div>
-                              )}
-                              {drop.status === 'ignored' && (
-                                <div className="absolute top-0 right-0 bg-red-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>
-                                  IGNORED
-                                </div>
-                              )}
-                              {drop.status === 'reconciled' && (
-                                <div className="absolute top-0 right-0 bg-purple-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>
-                                  RECONCILED
-                                </div>
-                              )}
-                              {drop.status === 'bank_dropped' && (
-                                <div className="absolute top-0 right-0 bg-yellow-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>
-                                  BANK DROPPED
-                                </div>
-                              )}
+                              {/* Ribbon precedence: Draft → Submitted → Reconciled → Bank dropped (Ignored after Draft) */}
+                              {(() => {
+                                const ribbonCls =
+                                  'absolute top-0 right-0 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10';
+                                const bankRibbon =
+                                  drop.bank_dropped === true ||
+                                  drop.bank_dropped === 1 ||
+                                  drop.status === 'bank_dropped';
+                                if (drop.status === 'drafted') {
+                                  return <div className={`${ribbonCls} bg-blue-500`} style={{ fontSize: '12px' }}>DRAFT</div>;
+                                }
+                                if (drop.status === 'ignored') {
+                                  return <div className={`${ribbonCls} bg-red-500`} style={{ fontSize: '12px' }}>IGNORED</div>;
+                                }
+                                if (drop.status === 'submitted' && !bankRibbon) {
+                                  return <div className={`${ribbonCls} bg-green-500`} style={{ fontSize: '12px' }}>SUBMITTED</div>;
+                                }
+                                if (drop.status === 'reconciled' && !bankRibbon) {
+                                  return <div className={`${ribbonCls} bg-purple-500`} style={{ fontSize: '12px' }}>RECONCILED</div>;
+                                }
+                                if (bankRibbon) {
+                                  return <div className={`${ribbonCls} bg-yellow-500`} style={{ fontSize: '12px' }}>BANK DROPPED</div>;
+                                }
+                                return null;
+                              })()}
                               <div className="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-4 gap-2">
                                 <span className="text-xs font-bold px-2 py-0.5 rounded uppercase" style={{ backgroundColor: COLORS.lightPink + '20', color: COLORS.magenta, fontSize: '14px' }}>Shift {drop.shift_number}</span>
                                 <span className="text-xl md:text-2xl font-bold tracking-tighter" style={{ color: COLORS.magenta }}>${drop.drop_amount}</span>
@@ -442,7 +440,7 @@ function CdDashboard() {
                               )}
                               {drop.submitted_at && (
                                 <div className="text-xs mb-3 md:mb-4 italic" style={{ color: COLORS.gray, fontSize: '14px' }}>
-                                  Submitted: {formatSubmittedOrSaved(drop.date, drop.submitted_at)}
+                                  Submitted: {formatPSTDateTime(null, drop.submitted_at)}
                                 </div>
                               )}
                               {drop.notes && (
@@ -510,18 +508,32 @@ function CdDashboard() {
                         <div className="h-full">
                           {drawer ? (
                             <div className="h-full flex flex-col p-4 md:p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm relative">
-                              {/* Status Ribbon - from linked cash drop or drawer's own status (e.g. standalone drawer) */}
-                              {(drop && drop.status === 'drafted') || (!drop && drawer.status === 'drafted') ? (
-                                <div className="absolute top-0 right-0 bg-blue-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>DRAFT</div>
-                              ) : (drop && drop.status === 'submitted') || (!drop && drawer.status === 'submitted') ? (
-                                <div className="absolute top-0 right-0 bg-green-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>SUBMITTED</div>
-                              ) : (drop && (drop.status === 'ignored' || drop.ignored)) || drawer.status === 'ignored' ? (
-                                <div className="absolute top-0 right-0 bg-red-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>IGNORED</div>
-                              ) : (drop && drop.status === 'reconciled') ? (
-                                <div className="absolute top-0 right-0 bg-purple-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>RECONCILED</div>
-                              ) : (drop && drop.status === 'bank_dropped') ? (
-                                <div className="absolute top-0 right-0 bg-yellow-500 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10" style={{ fontSize: '12px' }}>BANK DROPPED</div>
-                              ) : null}
+                              {/* Same precedence as drop card: Draft → Ignored → Submitted → Reconciled → Bank dropped */}
+                              {(() => {
+                                const rc =
+                                  'absolute top-0 right-0 text-white px-3 py-1 text-xs font-black uppercase tracking-widest transform rotate-12 translate-x-2 -translate-y-1 z-10';
+                                const draftSide =
+                                  (drop && drop.status === 'drafted') ||
+                                  (!drop && drawer.status === 'drafted');
+                                const ignoredSide =
+                                  (drop && (drop.status === 'ignored' || drop.ignored)) ||
+                                  drawer.status === 'ignored';
+                                const bankSide =
+                                  drop &&
+                                  (drop.bank_dropped === true ||
+                                    drop.bank_dropped === 1 ||
+                                    drop.status === 'bank_dropped');
+                                const reconSide = drop && drop.status === 'reconciled';
+                                const subSide =
+                                  (drop && drop.status === 'submitted') ||
+                                  (!drop && drawer.status === 'submitted');
+                                if (draftSide) return <div className={`${rc} bg-blue-500`} style={{ fontSize: '12px' }}>DRAFT</div>;
+                                if (ignoredSide) return <div className={`${rc} bg-red-500`} style={{ fontSize: '12px' }}>IGNORED</div>;
+                                if (subSide && !bankSide) return <div className={`${rc} bg-green-500`} style={{ fontSize: '12px' }}>SUBMITTED</div>;
+                                if (reconSide && !bankSide) return <div className={`${rc} bg-purple-500`} style={{ fontSize: '12px' }}>RECONCILED</div>;
+                                if (bankSide) return <div className={`${rc} bg-yellow-500`} style={{ fontSize: '12px' }}>BANK DROPPED</div>;
+                                return null;
+                              })()}
                               <div className="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-4 gap-2">
                                 <span className="text-xs font-bold px-2 py-0.5 rounded uppercase" style={{ backgroundColor: COLORS.yellowGreen + '20', color: COLORS.yellowGreen, fontSize: '14px' }}>Shift {drawer.shift_number}</span>
                                 <span className="text-xl md:text-2xl font-bold tracking-tighter" style={{ color: COLORS.yellowGreen }}>${drawer.total_cash}</span>

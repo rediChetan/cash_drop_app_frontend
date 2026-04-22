@@ -28,6 +28,7 @@ function Header({ sessionValid = true }) {
         const accessToken = sessionStorage.getItem('access_token');
         if (!refreshToken || !accessToken) {
             sessionStorage.clear();
+            window.dispatchEvent(new CustomEvent('sessionExpired'));
             navigate('/login', { replace: true });
             return;
         }
@@ -42,16 +43,19 @@ function Header({ sessionValid = true }) {
             });
             if (response.ok) {
                 sessionStorage.clear();
+                window.dispatchEvent(new CustomEvent('sessionExpired'));
                 navigate('/login', { replace: true });
                 showStatusMessage("Logout Successful", 'success');
             } else {
                 // Token may already be expired/invalid; log out locally without showing noisy errors.
                 if (response.status === 401 || response.status === 403) {
                     sessionStorage.clear();
+                    window.dispatchEvent(new CustomEvent('sessionExpired'));
                     navigate('/login', { replace: true });
                     return;
                 }
                 sessionStorage.clear();
+                window.dispatchEvent(new CustomEvent('sessionExpired'));
                 let errorMessage = response.statusText || 'Logout failed';
                 try {
                     const errorData = await response.json();
