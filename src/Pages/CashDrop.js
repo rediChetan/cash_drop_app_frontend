@@ -870,6 +870,9 @@ function CashDrop() {
       dropForm.append('cashReceivedOnReceipt', formData.cashReceivedOnReceipt);
       dropForm.append('variance', calculateVariance());
       dropForm.append('status', 'submitted');
+      if (mismatchAcked) {
+        dropForm.append('accept_bank_drop_mismatch', 'true');
+      }
       if (formData.notes) dropForm.append('notes', formData.notes);
       if (labelImage) dropForm.append('label_image', labelImage);
 
