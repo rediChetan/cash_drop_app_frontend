@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { API_ENDPOINTS } from "../config/api";
-import { getPSTDate, getPSTWeekStart, getPSTMonthStart, formatPSTDate } from '../utils/dateUtils';
+import { getPSTDate, getPSTWeekStart, getPSTMonthStart, formatPSTDate, formatPSTDateTime } from '../utils/dateUtils';
 import { CashDenominationDisplay, BILLS_DENOMINATIONS, COINS_ROLLS_DENOMINATIONS } from '../components/CashDenominationDisplay';
 
 function totalsObjectToRecord(totals) {
@@ -863,7 +863,7 @@ const BankDrop = () => {
                         <td className="p-3 font-bold" style={{ color: COLORS.magenta }}>{row.batch_number}</td>
                         <td className="p-3" style={{ color: COLORS.gray }}>{row.drop_count}</td>
                         <td className="p-3 text-xs hidden sm:table-cell" style={{ color: COLORS.gray }}>
-                          {row.created_at ? new Date(row.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                          {row.created_at ? formatPSTDateTime(null, row.created_at) : '—'}
                         </td>
                         <td className="p-3 font-bold" style={{ color: COLORS.yellowGreen }}>
                           {row.batch_drop_amount != null ? `$${Number(row.batch_drop_amount).toFixed(2)}` : '—'}

@@ -79,103 +79,106 @@ export const formatPSTDate = (dateStr, options = {}) => {
   }
 };
 
-/**
- * Parse a datetime string as UTC (GMT) and return a Date object.
- * Handles: "YYYY-MM-DD HH:mm:ss", "YYYY-MM-DDTHH:mm:ss", "YYYY-MM-DDTHH:mm:ss.000Z", or date + time parts.
- */
-function parseAsUTC(dateStr, timeStr) {
-  let iso = null;
-  if (timeStr && (timeStr.includes('T') || timeStr.includes('Z'))) {
-    iso = timeStr.includes('Z') ? timeStr : timeStr.replace(' ', 'T').replace(/(\d{2}:\d{2}:\d{2})(\.\d+)?/, '$1') + 'Z';
-  } else if (dateStr && timeStr) {
-    const datePart = dateStr.replace(/T.*$/, '');
-    const timePart = (timeStr.includes(' ') ? timeStr.split(' ')[1] : timeStr).replace(/\.\d+Z?$/, '');
-    iso = `${datePart}T${timePart}Z`;
-  } else if (dateStr) {
-    iso = dateStr.replace(/T.*$/, '') + 'T00:00:00Z';
-  }
-  if (!iso) return null;
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? null : d;
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatHour12From24(h, mi) {
+  const hour12 = h % 12 || 12;
+  const dayPeriod = h < 12 ? 'AM' : 'PM';
+  return `${hour12}:${String(mi).padStart(2, '0')} ${dayPeriod}`;
+}
+
+function formatDbDatetimeParts({ y, mo, d, h, mi }) {
+  return `${MONTH_SHORT[mo - 1]} ${d}, ${y} at ${formatHour12From24(h, mi)}`;
 }
 
 /**
- * Format datetime string for display in PST.
- * Backend datetimes are treated as GMT/UTC; they are converted to PST for display (PST = GMT - 8).
+ * Normalize MySQL DATETIME from API: use stored digits only (no timezone conversion).
+ * Strips trailing Z from JSON so "11:18" in DB is not shifted to 4:18 AM.
  */
-export const formatPSTDateTime = (dateStr, timeStr, options = {}) => {
+function normalizeDbDatetime(value) {
+  if (value == null || value === '') return '';
+  let s = String(value).trim();
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    const pad = (n) => String(n).padStart(2, '0');
+    s = `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+  } else {
+    s = s.replace('T', ' ').replace(/\.(\d+)?Z?$/i, '').replace(/Z$/i, '').trim();
+  }
+  return s;
+}
+
+/** Parse YYYY-MM-DD + HH:mm:ss from DB — display those numbers as-is (12h clock). */
+function parseDbDatetimeParts(dateStr, timeStr) {
+  const build = (datePart, timePart) => {
+    const dateMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!dateMatch) return null;
+    timePart = (timePart || '00:00:00').replace(/\.\d+/, '').slice(0, 8);
+    const timeMatch = timePart.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (!timeMatch) return null;
+    return {
+      y: Number(dateMatch[1]),
+      mo: Number(dateMatch[2]),
+      d: Number(dateMatch[3]),
+      h: Number(timeMatch[1]),
+      mi: Number(timeMatch[2]),
+      se: Number(timeMatch[3] || 0)
+    };
+  };
+
+  if (dateStr && timeStr) {
+    const dateOnly = normalizeDbDatetime(dateStr).slice(0, 10);
+    const timeOnly = normalizeDbDatetime(timeStr).replace(/^\d{4}-\d{2}-\d{2}\s*/, '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly) && /^\d{1,2}:\d{2}/.test(timeOnly)) {
+      const fromSplit = build(dateOnly, timeOnly);
+      if (fromSplit) return fromSplit;
+    }
+  }
+
+  const combined = normalizeDbDatetime(timeStr || dateStr);
+  if (!combined) return null;
+
+  const spaceParts = combined.split(/\s+/);
+  const datePart = (dateStr ? normalizeDbDatetime(dateStr).slice(0, 10) : spaceParts[0]) || '';
+  const timePart = spaceParts[1] || (dateStr ? normalizeDbDatetime(timeStr) : '00:00:00');
+  return build(datePart, timePart);
+}
+
+/**
+ * Format a DB datetime for display (submitted_at, created_at, etc.).
+ * Shows the hour/minute stored in MySQL — no UTC or Pacific offset math.
+ */
+export const formatPSTDateTime = (dateStr, timeStr) => {
   if (!dateStr && !timeStr) return '';
+  if (timeStr) timeStr = normalizeDbDatetime(timeStr);
+  if (dateStr) dateStr = normalizeDbDatetime(dateStr);
   if (!dateStr && timeStr) {
     if (timeStr.includes(' ')) {
-      const parts = timeStr.split(' ');
+      const parts = timeStr.split(/\s+/);
       dateStr = parts[0];
-      timeStr = parts[1] || timeStr;
-    } else if (timeStr.includes('T')) {
-      dateStr = timeStr.split('T')[0];
+      timeStr = parts.slice(1).join(' ');
     }
   }
   if (!dateStr) return '';
 
-  try {
-    const date = parseAsUTC(dateStr, timeStr);
-    if (!date) {
-      return formatPSTDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' }) + (timeStr ? ` at ${timeStr}` : '');
-    }
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Los_Angeles',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-    const parts = formatter.formatToParts(date);
-    const month = parts.find(p => p.type === 'month').value;
-    const day = parts.find(p => p.type === 'day').value;
-    const year = parts.find(p => p.type === 'year').value;
-    const hour = parts.find(p => p.type === 'hour').value;
-    const minute = parts.find(p => p.type === 'minute').value;
-    const dayPeriod = parts.find(p => p.type === 'dayPeriod').value;
-    return `${month} ${day}, ${year} at ${hour}:${minute} ${dayPeriod}`;
-  } catch (e) {
-    if (timeStr) {
-      if (timeStr.includes(' ')) return `${dateStr} at ${timeStr.split(' ')[1]}`;
-      return `${dateStr} at ${timeStr}`;
-    }
-    return dateStr;
-  }
+  const parsed = parseDbDatetimeParts(dateStr, timeStr);
+  if (parsed) return formatDbDatetimeParts(parsed);
+
+  return formatPSTDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' })
+    + (timeStr ? ` at ${timeStr}` : '');
 };
 
-/**
- * Format a datetime string as time only in PST (e.g. "10:30 AM").
- * Input is treated as GMT/UTC.
- */
+/** Time portion only from a DB datetime string (e.g. "11:18 AM"). */
 export const formatTimePST = (datetimeStr) => {
   if (!datetimeStr) return '';
-  let date = null;
-  if (datetimeStr.includes(' ') || datetimeStr.includes('T')) {
-    const d = datetimeStr.includes('T') ? datetimeStr.split('T')[0] : datetimeStr.split(' ')[0];
-    const t = datetimeStr.includes('T') ? datetimeStr.split('T')[1] : datetimeStr.split(' ')[1];
-    date = parseAsUTC(d, t || datetimeStr);
-  } else {
-    date = parseAsUTC(null, datetimeStr);
-  }
-  if (!date || isNaN(date.getTime())) return '';
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
-  return formatter.format(date);
+  const parsed = parseDbDatetimeParts(null, normalizeDbDatetime(datetimeStr));
+  if (parsed) return formatHour12From24(parsed.h, parsed.mi);
+  return '';
 };
 
 /**
- * Format for display using the selected/finalization date (not from timestamp).
- * Use this so the date shown is always the one selected at cash drop submission, with time from the timestamp in PST.
+ * Business date (date column) + time from a DB timestamp — no timezone conversion.
  */
-export const formatPSTDateWithTime = (selectedDateStr, timestampStr, options = {}) => {
+export const formatPSTDateWithTime = (selectedDateStr, timestampStr) => {
   if (!selectedDateStr) return timestampStr ? formatTimePST(timestampStr) : '';
   const datePart = formatPSTDate(selectedDateStr, { month: 'short', day: 'numeric', year: 'numeric' });
   if (!timestampStr) return datePart;

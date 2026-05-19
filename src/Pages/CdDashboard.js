@@ -194,7 +194,7 @@ function CdDashboard() {
 
   const rowsForActiveDate = getRowsForActiveDate();
 
-  // Date part comes from first arg; time from timestamp (PST). For "Saved" use business date; for "Submitted" pass the submission calendar date from submitted_at.
+  // Business date + DB timestamp digits as-is (no timezone conversion).
   const formatSubmittedOrSaved = (selectedDateStr, timestampStr) => {
     return formatPSTDateWithTime(selectedDateStr, timestampStr);
   };
