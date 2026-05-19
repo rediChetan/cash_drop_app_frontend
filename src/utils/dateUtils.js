@@ -167,6 +167,26 @@ export const formatPSTDateTime = (dateStr, timeStr) => {
     + (timeStr ? ` at ${timeStr}` : '');
 };
 
+/**
+ * Bank drop batch history: `created_at` is MySQL CURRENT_TIMESTAMP (UTC on Hostinger).
+ * Subtract hours so the UI matches Pacific local time (7h during PDT).
+ */
+export const formatDbDatetimeSubtractHours = (datetimeStr, hoursToSubtract = 7) => {
+  if (!datetimeStr) return '';
+  const parsed = parseDbDatetimeParts(null, normalizeDbDatetime(datetimeStr));
+  if (!parsed) return formatPSTDateTime(null, datetimeStr);
+
+  const d = new Date(Date.UTC(parsed.y, parsed.mo - 1, parsed.d, parsed.h, parsed.mi, parsed.se || 0));
+  d.setUTCHours(d.getUTCHours() - hoursToSubtract);
+  return formatDbDatetimeParts({
+    y: d.getUTCFullYear(),
+    mo: d.getUTCMonth() + 1,
+    d: d.getUTCDate(),
+    h: d.getUTCHours(),
+    mi: d.getUTCMinutes()
+  });
+};
+
 /** Time portion only from a DB datetime string (e.g. "11:18 AM"). */
 export const formatTimePST = (datetimeStr) => {
   if (!datetimeStr) return '';
